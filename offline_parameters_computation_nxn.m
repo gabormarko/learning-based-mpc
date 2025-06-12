@@ -85,10 +85,12 @@ acc_bound      = 2;  % constraint on acceleration of EV
 F = zeros(nc, nx);
 F(1,1) = 1/distance_error;
 F(2,1) = -1/distance_error;
-F(3,end) = 1/acc_bound;
-F(4,end) = -1/acc_bound;
 
-G = [0; 0; 1; 1];
+G = zeros(nc, nu);
+G(3,end) = 1/acc_bound;
+G(4,end) = -1/acc_bound;
+
+%G = [0; 0; 1/acc_bound; -1/acc_bound];
 
 % F     = [1/distance_error 0 0; -1/distance_error 0 0; 0 0 0; 0 0 0];       %%% CHANGE! 
 % G     = [0; 0; 1/acc_bound; -1/acc_bound];  
@@ -136,7 +138,7 @@ W_hat_opt               = (1 - alpha_opt)*v_opt + alpha_opt*W;
 W_hat_opt = Polyhedron('A', W_hat_opt.A, 'b', W_hat_opt.b);
 
 %%% CHANGE! to make it faster
-epsilon = 5e-1;
+epsilon = 1e-2;
 
 S_hat_opt        = MRPISet(Phi, W_hat_opt, epsilon);
 S_true           = MRPISet(Phi, W_true, epsilon); 

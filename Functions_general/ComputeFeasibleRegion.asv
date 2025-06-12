@@ -60,7 +60,6 @@ classdef ComputeFeasibleRegion < handle
         function Nu = ComNu_RMPC(obj, hs)
             % compute the value of \nu according to hs
             Nu = obj.N; % Nu must be longer than N
-            disp('IniFeaReg.ComFeasibleRegion_RMPC( )');
             while Nu
                 goal     = zeros(obj.nc, 1); % save vector value max{F_bar*(Pis)^(Nu + 1)*z}
                 M        = obj.F_bar*(obj.Psi^(Nu + 1));
@@ -72,7 +71,7 @@ classdef ComputeFeasibleRegion < handle
                     break
                 else
                     Nu = Nu + 1;
-                    disp(['Nu = ', num2str(Nu)]);
+                    disp(['IniFeaReg.ComFeasibleRegion_RMPC( )Nu = ', num2str(Nu)]);
                     continue
                 end
             end
