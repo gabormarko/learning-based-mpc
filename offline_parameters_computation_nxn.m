@@ -4,8 +4,10 @@ clc
 clear
 close all
 
+tic;
+
 %%% CHANGE! - DIMENSIONS
-nx = 2; %%% NUMBER OF STATES
+nx = 3; %%% NUMBER OF STATES
 nu = 1; %%% NUMBER OF INPUTS
 nc = 4; %%% NUMBER OF CONSTRAINTS
 
@@ -240,10 +242,13 @@ parameters.T                    = T;
 parameters.W_true               = W_true;
 save('parameters_NEW.mat', 'parameters')
 
+elapsedTime = toc;
+
+fprintf('\nComputation time: %.2f seconds\n', elapsedTime)
+
 function P_full = embedInFullDim(P, nx)
     % Pads the vertices of a lower-dimensional polyhedron with zeros
     V = P.V;
     V_full = [V, zeros(size(V,1), nx - size(V,2))];
     P_full = Polyhedron('V', V_full);
 end
-

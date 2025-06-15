@@ -68,7 +68,8 @@ classdef ComputeFeasibleRegion < handle
                 for i    = 1:1:obj.nc
                     goal(i) = full(obj.Com_z(M(i, :), hs, M_before));
                 end
-                if goal <= (1 - hs) % max{F_bar*(Psi)^(Nu + 1)*z} <= 1 - hs
+                %%% CHANGED! OR condition
+                if all(goal <= (1 - hs)) || (Nu > 500) % max{F_bar*(Psi)^(Nu + 1)*z} <= 1 - hs
                     break
                 else
                     Nu = Nu + 1;

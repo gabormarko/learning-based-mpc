@@ -3,6 +3,9 @@ addpath('Functions');
 clc
 clear
 close all
+
+tic;
+
 T = 0.5; 
 N = 8;   
 A = [1 T; 0 1]; 
@@ -170,4 +173,7 @@ parameters.T                    = T;
 parameters.W_true               = W_true;
 save('parameters_NEW.mat', 'parameters')
 
+elapsedTime = toc;
+
+fprintf('Computation time: %.2f seconds\n', elapsedTime)
 
