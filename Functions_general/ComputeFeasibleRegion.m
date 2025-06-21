@@ -122,8 +122,8 @@ classdef ComputeFeasibleRegion < handle
             disp('F_Com matrix:');
             disp(F_Com);            
 
-            hs    = zeros(obj.nc-2, 1);
-            for i = 1:(obj.nc-2)
+            hs    = zeros(obj.nc, 1);
+            for i = 1:(obj.nc)
                 hs(i) = full(obj.Com_hs(F_Com(i, :))); % elementwisely get hs vector
                 disp(['hs(', num2str(i), ') = ', num2str(hs(i))]);
             end
