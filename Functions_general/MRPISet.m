@@ -78,7 +78,12 @@ if nx == 2
 elseif nx == 3
     [convhull_index,~] = convhull(sample_proj(1,:)', sample_proj(2,:)', sample_proj(3,:)');
 else
-    error('convhull not implemented for dimensions > 3');
+    % For higher dimensions, use convhulln if available
+    try
+        convhull_index = convhulln(sample_proj');
+    catch
+        error('convhulln not available or failed for nx > 3');
+    end
 end
 
 MRPI_W             = sample_proj(:,convhull_index);

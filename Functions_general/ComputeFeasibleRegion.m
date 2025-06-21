@@ -59,8 +59,37 @@ classdef ComputeFeasibleRegion < handle
 
         function Nu = ComNu_RMPC(obj, hs)
             % compute the value of \nu according to hs
+            max_Nu = 100; % Prevent infinite loop
             Nu = obj.N; % Nu must be longer than N
             disp('IniFeaReg.ComFeasibleRegion_RMPC( )');
+            while Nu < max_Nu
+                goal = zeros(obj.nc, 1); % save vector value max{F_bar*(Pis)^(Nu + 1)*z}
+                M = obj.F_bar*(obj.Psi^(Nu + 1));
+                M_before = obj.F_bar*(obj.Psi^(Nu));
+                for i = 1:obj.nc
+                    val = full(obj.Com_z(M(i, :), hs, M_before));
+                    if isnan(val) || isinf(val)
+                        warning('ComNu_RMPC: LP returned NaN or Inf at Nu=%d, constraint=%d. Breaking loop.', Nu, i);
+                        break;
+                    end
+                    goal(i) = val;
+                end
+                % Print debug info
+                disp(['Nu = ', num2str(Nu)]);
+                disp(['goal = ', num2str(goal')]);
+                disp(['1-hs = ', num2str((1-hs)')]);
+                %fprintf('Nu = %d, goal = [%s], 1-hs = [%s]\n', Nu, num2str(goal'), num2str((1-hs)'));
+                if all(goal <= (1 - hs))
+                    break
+                else
+                    Nu = Nu + 1;
+                end
+            end
+            if Nu == max_Nu
+                warning('ComNu_RMPC: Maximum Nu reached without satisfying the condition.');
+            end                       
+            
+            %{
             while Nu
                 goal     = zeros(obj.nc, 1); % save vector value max{F_bar*(Pis)^(Nu + 1)*z}
                 M        = obj.F_bar*(obj.Psi^(Nu + 1));
@@ -69,7 +98,7 @@ classdef ComputeFeasibleRegion < handle
                     goal(i) = full(obj.Com_z(M(i, :), hs, M_before));
                 end
                 %%% CHANGED! OR condition
-                if all(goal <= (1 - hs)) || (Nu > 500) % max{F_bar*(Psi)^(Nu + 1)*z} <= 1 - hs
+                if all(goal <= (1 - hs)) % || (Nu > 500) % max{F_bar*(Psi)^(Nu + 1)*z} <= 1 - hs
                     break
                 else
                     Nu = Nu + 1;
@@ -77,16 +106,36 @@ classdef ComputeFeasibleRegion < handle
                     continue
                 end
             end
+            %}            
         end
 
         function [F_N, hs, Nu] = ComFeasibleRegion_RMPC(obj)
             % compute the feasible region of s_0|k with S
             % outputs the feasible region F_N, hs value, and \nu value Nu
             F_Com = obj.F + obj.G*obj.K; % [F + GK]
+            disp('F matrix:');
+            disp(obj.F);
+            disp('G matrix:');
+            disp(obj.G);
+            disp('K matrix:');
+            disp(obj.K);
+            disp('F_Com matrix:');
+            disp(F_Com);            
+
+            hs    = zeros(obj.nc-2, 1);
+            for i = 1:(obj.nc-2)
+                hs(i) = full(obj.Com_hs(F_Com(i, :))); % elementwisely get hs vector
+                disp(['hs(', num2str(i), ') = ', num2str(hs(i))]);
+            end
+
+            %{
             hs    = zeros(obj.nc, 1);
             for i = 1:1:obj.nc
                 hs(i) = full(obj.Com_hs(F_Com(i, :))); % elementwisely get hs vector
+                disp(['hs(', num2str(i), ') = ', num2str(hs(i))]);
             end
+            %}
+            
             Nu = ComNu_RMPC(obj, hs);
 
             Sam_num = 5000;
@@ -115,9 +164,26 @@ classdef ComputeFeasibleRegion < handle
                 F_Ns = sample_proj(:, convhull_index);
                 F_Ns = Polyhedron(F_Ns');
             else
+                try
+                    convhull_index = convhulln(sample_proj'); % high-dimensional convex hull
+                    F_Ns = Polyhedron('V', sample_proj');
+                catch
+                    warning('High-dimensional convex hull computation failed or not supported.');
+                    F_Ns = Polyhedron.empty;
+                end
+            end 
+            
+            %{
+            if obj.nx <= 3
+                [convhull_index, ~] = convhull(sample_proj');
+                F_Ns = sample_proj(:, convhull_index);
+                F_Ns = Polyhedron(F_Ns');
+            else
                 warning('Convex hull computation not supported for nx > 3. Feasible region is not computed.');
                 F_Ns = Polyhedron.empty;
             end
+            %}
+            
             F_Ns = sample_proj(:,convhull_index);
             F_Ns = Polyhedron(F_Ns');
             F_N  = F_Ns + obj.S;

@@ -1,6 +1,6 @@
 % General Parameters
 addpath('Functions_general');
-clc
+%clc
 clear
 close all
 
@@ -11,6 +11,7 @@ nx = 3; %%% NUMBER OF STATES
 nu = 1; %%% NUMBER OF INPUTS
 nc = 4; %%% NUMBER OF CONSTRAINTS
 
+%
 T = 0.5;
 N = 8;
 
@@ -80,17 +81,51 @@ samples_opt = W_true.V;  % should be n_samples x nx
 disp(size(samples_opt)); % should print [num_samples, 3]
 
 
-distance_error = 15; % constraint on the relative distance between EV and LV
-acc_bound      = 2;  % constraint on acceleration of EV
+if nx == 2      %%%% 2D
+    nc = 4; % number of constraints
+    distance_error = 15; % constraint on the relative distance between EV and LV
+    acc_bound      = 2;  % constraint on acceleration of EV
 
-%%% CHANGE! - CONSTRAINTS
-F = zeros(nc, nx);
-F(1,1) = 1/distance_error;
-F(2,1) = -1/distance_error;
+    %%% CHANGE! - CONSTRAINTS
+    F = zeros(nc, nx);
+    F(1,1) = 1/distance_error;
+    F(2,1) = -1/distance_error;
 
-G = zeros(nc, nu);
-G(3,end) = 1/acc_bound;
-G(4,end) = -1/acc_bound;
+    G = zeros(nc, nu);
+    G(3,end) = 1/acc_bound;
+    G(4,end) = -1/acc_bound;
+else    %%%% 3D+
+    % Add 6 state constraints and 2 input constraints
+    nc_state = 6; % 2 per state
+    nc_input = 2; % 2 for input
+    nc = nc_state + nc_input;
+
+    F = zeros(nc, nx);
+    G = zeros(nc, nu);
+
+    distance_error = 15;
+    velocity_error = 10;
+    accel_error    = 5;
+    acc_bound      = 2;
+
+    % State constraints
+    F(1,1) = 1/distance_error;   % x1 upper
+    F(2,1) = -1/distance_error;  % x1 lower
+    F(3,2) = 1/velocity_error;   % x2 upper
+    F(4,2) = -1/velocity_error;  % x2 lower
+    F(5,3) = 1/accel_error;      % x3 upper
+    F(6,3) = -1/accel_error;     % x3 lower
+
+    % Input constraints
+    G(7,1) = 1/acc_bound;        % u upper
+    G(8,1) = -1/acc_bound;       % u lower
+
+    % Debug: print constraint matrices
+    disp('F matrix:');
+    disp(F);
+    disp('G matrix:');
+    disp(G);
+end
 
 %G = [0; 0; 1/acc_bound; -1/acc_bound];
 
