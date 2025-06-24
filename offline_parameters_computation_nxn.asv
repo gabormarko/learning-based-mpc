@@ -108,7 +108,7 @@ else    %%%% 3D+ (generalized for any nx > 2)
     G = zeros(nc, nu);
     
     distance_error = 40; % constraint on the relative distance between EV and LV
-    acc_bound      = 60;  % constraint on acceleration of EV
+    acc_bound      = 2;  % constraint on acceleration of EV
 
     % Set bounds for each state (can be tuned per state)
     state_bounds = 40 * ones(nx,1); % or set individually if needed

@@ -89,4 +89,27 @@ end
 MRPI_W             = sample_proj(:,convhull_index);
 Fs                 = Polyhedron(MRPI_W');
 
+%{
+% --- DEBUG: Print max vertex magnitude of MRPI set after computation ---
+% Compute and print the maximum absolute value of any vertex in the MRPI set
+if exist('Fs', 'var') && ~isempty(Fs.V)
+    max_vertex = max(abs(Fs.V(:)));
+    fprintf('DEBUG: Max absolute value in MRPI set vertices: %g\n', max_vertex);
+else
+    fprintf('DEBUG: MRPI set vertices not available.\n');
+end
+
+% --- DEBUG: Check stability of closed-loop matrix Phi if available ---
+if exist('Ak', 'var')
+    eig_Ak = eig(Ak);
+    fprintf('DEBUG: Closed-loop eigenvalues (should be <1 in magnitude for stability):\n');
+    disp(eig_Ak);
+    if all(abs(eig_Ak) < 1)
+        fprintf('DEBUG: Closed-loop system is stable.\n');
+    else
+        fprintf('DEBUG: WARNING! Closed-loop system is NOT stable.\n');
+    end
+end
+
+%}
 end

@@ -164,13 +164,8 @@ classdef ComputeFeasibleRegion < handle
                 F_Ns = sample_proj(:, convhull_index);
                 F_Ns = Polyhedron(F_Ns');
             else
-                try
-                    convhull_index = convhulln(sample_proj'); % high-dimensional convex hull
-                    F_Ns = Polyhedron('V', sample_proj');
-                catch
-                    warning('High-dimensional convex hull computation failed or not supported.');
-                    F_Ns = Polyhedron.empty;
-                end
+                warning('Convex hull computation not supported for nx > 3. Using all projected samples as Polyhedron vertices.');
+                F_Ns = Polyhedron('V', sample_proj');
             end 
             
             %{
@@ -184,8 +179,6 @@ classdef ComputeFeasibleRegion < handle
             end
             %}
             
-            F_Ns = sample_proj(:,convhull_index);
-            F_Ns = Polyhedron(F_Ns');
             F_N  = F_Ns + obj.S;
         end
 
@@ -219,18 +212,15 @@ classdef ComputeFeasibleRegion < handle
             parfor k = 1:Sam_num
                 [sample_proj(:,k),~] = Fea_Set(Sample(:,k));
             end
-            % [convhull_index, ~] = convhull(sample_proj');
             if obj.nx <= 3
                 [convhull_index, ~] = convhull(sample_proj');
                 F_Ns = sample_proj(:, convhull_index);
                 F_Ns = Polyhedron(F_Ns');
             else
-                warning('Convex hull computation not supported for nx > 3. Feasible region is not computed.');
-                F_Ns = Polyhedron.empty;
+                warning('Convex hull computation not supported for nx > 3. Using all projected samples as Polyhedron vertices.');
+                F_Ns = Polyhedron('V', sample_proj');
             end
             
-            F_Ns = sample_proj(:,convhull_index);
-            F_Ns = Polyhedron(F_Ns');
             F_N  = F_Ns + obj.S_true;
         end
         
@@ -265,9 +255,14 @@ classdef ComputeFeasibleRegion < handle
             parfor k = 1:Sam_num
                 [sample_proj(:,k),~] = Fea_Set(Sample(:,k));
             end
-            [convhull_index, ~] = convhull(sample_proj');
-            F_Ns_hat_opt = sample_proj(:,convhull_index);
-            F_Ns_hat_opt = Polyhedron(F_Ns_hat_opt');
+            if obj.nx <= 3
+                [convhull_index, ~] = convhull(sample_proj');
+                F_Ns_hat_opt = sample_proj(:,convhull_index);
+                F_Ns_hat_opt = Polyhedron(F_Ns_hat_opt');
+            else
+                warning('Convex hull computation not supported for nx > 3. Using all projected samples as Polyhedron vertices.');
+                F_Ns_hat_opt = Polyhedron('V', sample_proj');
+            end
             F_N_hat_opt  = F_Ns_hat_opt + obj.S_hat_opt;
         end
 
