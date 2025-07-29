@@ -1,3 +1,9 @@
+% UQRobustMPC.m
+%
+% The proposed uncertainty quantification-based Robust MPC controller. 
+% Uses CasADi for all optimization problems (LPs and QPs).
+
+
 classdef UQRobustMPC < handle
     
     properties (SetAccess = public)
@@ -118,7 +124,7 @@ classdef UQRobustMPC < handle
         function UQ = LPforUQ(obj) % Linear Programming for Updating the Uncertainty Set Online
             opti = casadi.Opti( );
             beta = opti.variable( );
-            y    = opti.variable(2, 1);
+            y    = opti.variable(obj.nx, 1);
             alpha_before = opti.parameter( );
             v_before     = opti.parameter(obj.nx, 1);
             w_new        = opti.parameter(obj.nx, 1);

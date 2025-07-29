@@ -1,3 +1,7 @@
+% ComputeFeasibleRegion.m
+%
+% The class computes initial sets for MPC, using polytopic representations and sampling inside polytopes. It uses CasADi for LPs and custom sampling routines.
+
 classdef InitialSetComputation < handle
     
     properties (SetAccess = public)
@@ -97,16 +101,23 @@ classdef InitialSetComputation < handle
         function samples = polytope_sample(obj, N_sam, A, b, V)
             % Generic sampling inside polytope defined by A*x <= b with vertex matrix V
             dim = size(V, 2);
-            mins = min(V);
-            maxs = max(V);
-            samples = zeros(dim, N_sam);
-            i = 1;
-            while i <= N_sam
-                x = (maxs - mins) .* rand(1, dim) + mins;
-                if all(A * x' <= b)
-                    samples(:, i) = x';
-                    i = i + 1;
+            if dim <= 2
+                mins = min(V);
+                maxs = max(V);
+                samples = zeros(dim, N_sam);
+                i = 1;
+                while i <= N_sam
+                    x = (maxs - mins) .* rand(1, dim) + mins;
+                    if all(A * x' <= b)
+                        samples(:, i) = x';
+                        i = i + 1;
+                    end
                 end
+            else
+                % Use MPT3's Polyhedron sampling for high-dimensional cases
+                P = Polyhedron('A', A, 'b', b);
+                % MPT3's gridSample is for grid, but for random use uniformSample
+                samples = P.uniformSample(N_sam)'; % returns N_sam x dim, transpose to dim x N_sam
             end
         end
         

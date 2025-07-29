@@ -1,3 +1,7 @@
+% MRPISet.m
+%
+% Computes the robust positive invariant set S for a given system.
+
 function Fs = MRPISet(Ak, W, epsilon)
 % Sampling-Based Method for Computing the Robust Positive Invariant Set
 [nx, ~] = size(Ak); 
@@ -6,9 +10,18 @@ alpha   = 1000;
 Ms      = 1000;
 it      = 0;
 
-%%% CHANGE!
+%%% CHANGE! Add more directions for support function
 E = eye(nx);
-D = [E; -E]; % basis directions
+D = [E; -E]; % axis directions
+% Add diagonals
+if nx > 2
+    D = [D; ones(1,nx)/sqrt(nx); -ones(1,nx)/sqrt(nx)];
+end
+% Add random directions for more coverage
+n_extra = 10;
+extra_dirs = randn(n_extra, nx);
+extra_dirs = extra_dirs ./ vecnorm(extra_dirs,2,2); % normalize
+D = [D; extra_dirs];
 D_transpose = D';
 
 while(alpha > epsilon/(epsilon + Ms))
@@ -49,8 +62,16 @@ while(alpha > epsilon/(epsilon + Ms))
     it = it+1;
 end
 
-Sam_num = 10000;
-Sample  = 50*rand(nx,Sam_num) - 25;
+% Sample from the actual set W
+Sam_num = 5000;
+try
+    % If W has a sample method (MPT3 Polyhedron)
+    Sample = W.randomPoint(Sam_num)'; % [nx x Sam_num]
+catch
+    % Fallback: uniform box
+    warning('W.randomPoint failed, using uniform box sampling.');
+    Sample = 50*rand(nx,Sam_num) - 25;
+end
 
 
 yalmip('clear')
@@ -75,19 +96,21 @@ end
 % [convhull_index,~] = convhull(sample_proj');
 if nx == 2
     [convhull_index,~] = convhull(sample_proj');
+    MRPI_W = sample_proj(:,convhull_index);
+    Fs = Polyhedron(MRPI_W');
 elseif nx == 3
     [convhull_index,~] = convhull(sample_proj(1,:)', sample_proj(2,:)', sample_proj(3,:)');
+    MRPI_W = sample_proj(:,convhull_index);
+    Fs = Polyhedron(MRPI_W');
 else
-    % For higher dimensions, use convhulln if available
-    try
-        convhull_index = convhulln(sample_proj');
-    catch
-        error('convhulln not available or failed for nx > 3');
-    end
+    % For nx > 3, use zonotope approximation with MPT3
+    % Center: mean of projected samples
+    zono_center = mean(sample_proj, 2);
+    % Generators: principal directions (PCA) or random subset of sample differences
+    num_gens = min(10, size(sample_proj,2));
+    sample_diffs = sample_proj(:,1:num_gens) - zono_center;
+    Fs = Zonotope(zono_center, sample_diffs);
 end
-
-MRPI_W             = sample_proj(:,convhull_index);
-Fs                 = Polyhedron(MRPI_W');
 
 %{
 % --- DEBUG: Print max vertex magnitude of MRPI set after computation ---

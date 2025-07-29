@@ -1,3 +1,7 @@
+% NominalRobustMPC.m
+%
+% Conventional Robust MPC controller. It uses a nominal model and a robust positive invariant set for the system.
+
 classdef NominalRobustMPC < handle
     
     properties (SetAccess = public)

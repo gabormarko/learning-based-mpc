@@ -1,3 +1,9 @@
+% ComputeFeasibleRegion.m
+%
+% This class computes feasible regions for robust and uncertainty-quantified MPC problems. 
+% It uses CasADi for LPs and YALMIP for sample-based projections and    % convex hulls.
+
+
 classdef ComputeFeasibleRegion < handle
 
     properties (SetAccess = public)
@@ -164,8 +170,12 @@ classdef ComputeFeasibleRegion < handle
                 F_Ns = sample_proj(:, convhull_index);
                 F_Ns = Polyhedron(F_Ns');
             else
-                warning('Convex hull computation not supported for nx > 3. Using all projected samples as Polyhedron vertices.');
-                F_Ns = Polyhedron('V', sample_proj');
+                warning('Convex hull computation not supported for nx > 3. Using Zonotope class (MPT3) for high-dimensional cases.');
+                % Use Zonotope for high-dimensional case (MPT3)
+                center = mean(sample_proj, 2); % mean of samples
+                generators = sample_proj - center; % each column is a generator
+                % Optionally, reduce generators (e.g., via SVD/PCA)
+                F_Ns = Zonotope(center, generators);
             end 
             
             %{
@@ -217,8 +227,12 @@ classdef ComputeFeasibleRegion < handle
                 F_Ns = sample_proj(:, convhull_index);
                 F_Ns = Polyhedron(F_Ns');
             else
-                warning('Convex hull computation not supported for nx > 3. Using all projected samples as Polyhedron vertices.');
-                F_Ns = Polyhedron('V', sample_proj');
+                warning('Convex hull computation not supported for nx > 3. Using Zonotope class (MPT3) for high-dimensional cases.');
+                % Use Zonotope for high-dimensional case (MPT3)
+                center = mean(sample_proj, 2); % mean of samples
+                generators = sample_proj - center; % each column is a generator
+                % Optionally, reduce generators (e.g., via SVD/PCA)
+                F_Ns = Zonotope(center, generators);
             end
             
             F_N  = F_Ns + obj.S_true;
@@ -260,8 +274,12 @@ classdef ComputeFeasibleRegion < handle
                 F_Ns_hat_opt = sample_proj(:,convhull_index);
                 F_Ns_hat_opt = Polyhedron(F_Ns_hat_opt');
             else
-                warning('Convex hull computation not supported for nx > 3. Using all projected samples as Polyhedron vertices.');
-                F_Ns_hat_opt = Polyhedron('V', sample_proj');
+                warning('Convex hull computation not supported for nx > 3. Using Zonotope class (MPT3) for high-dimensional cases.');
+                % Use Zonotope for high-dimensional case (MPT3)
+                center = mean(sample_proj, 2); % mean of samples
+                generators = sample_proj - center; % each column is a generator
+                % Optionally, reduce generators (e.g., via SVD/PCA)
+                F_Ns_hat_opt = Zonotope(center, generators);
             end
             F_N_hat_opt  = F_Ns_hat_opt + obj.S_hat_opt;
         end
@@ -304,8 +322,12 @@ classdef ComputeFeasibleRegion < handle
                 F_Ns = sample_proj(:, convhull_index);
                 F_Ns = Polyhedron(F_Ns');
             else
-                warning('Convex hull computation not supported for nx > 3. Feasible region is not computed.');
-                F_Ns = Polyhedron.empty;
+                warning('Convex hull computation not supported for nx > 3. Using Zonotope class (MPT3) for high-dimensional cases.');
+                % Use Zonotope for high-dimensional case (MPT3)
+                center = mean(sample_proj, 2); % mean of samples
+                generators = sample_proj - center; % each column is a generator
+                % Optionally, reduce generators (e.g., via SVD/PCA)
+                F_Ns = Zonotope(center, generators);
             end
 
             F_Ns = sample_proj(:,convhull_index);
