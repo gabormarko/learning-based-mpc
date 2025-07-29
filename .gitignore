@@ -1,2 +1,7 @@
+*.mat
+*.pdf
+*.fig
+*.svg
 # Ignore all MATLAB .mat files
 parameters_NEW.mat
+Results_1_NEW.mat
