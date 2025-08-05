@@ -46,55 +46,47 @@ classdef ModelingCar < handle
         
         function EV_samples = polytope_sample_EV(obj, N_sam)
             nx = size(obj.Xi_true_EV_A,2);
-            if nx == 2
-                V = obj.Xi_true_EV.V;
-                ver_x = V(:, 1);
-                ver_y = V(:, 2);
-                min_x = min(ver_x);
-                max_x = max(ver_x);
-                min_y = min(ver_y);
-                max_y = max(ver_y);
-                EV_samples = zeros(2, N_sam);
-                i = 1;
-                while i <= N_sam
-                    x = (max_x-min_x).*rand(1) + min_x;
-                    y = (max_y-min_y).*rand(1) + min_y;
-                    if all(obj.Xi_true_EV_A*[x; y] <= obj.Xi_true_EV_b)
-                        EV_samples(:, i) = [x; y];
-                        i = i + 1;
-                    end
+            V = obj.Xi_true_EV.V;
+            v_min = min(V, [], 1);
+            v_max = max(V, [], 1);
+            EV_samples = zeros(nx, N_sam);
+            count = 0;
+            max_trials = 1000 * N_sam;
+            trials = 0;
+            while count < N_sam && trials < max_trials
+                x = v_min + (v_max - v_min) .* rand(1, nx);
+                if all(obj.Xi_true_EV_A * x' <= obj.Xi_true_EV_b)
+                    count = count + 1;
+                    EV_samples(:, count) = x';
                 end
-            else
-                % Use MPT3 Polyhedron.uniformSample for nx > 2
-                P_EV = Polyhedron('A', obj.Xi_true_EV_A, 'b', obj.Xi_true_EV_b);
-                EV_samples = P_EV.uniformSample(N_sam)';
+                trials = trials + 1;
+            end
+            if count < N_sam
+                warning('polytope_sample_EV: Only %d samples generated out of %d requested.', count, N_sam);
+                EV_samples = EV_samples(:, 1:count);
             end
         end
         
         function LV_samples = polytope_sample_LV(obj, N_sam)
             nx = size(obj.Xi_true_LV_A,2);
-            if nx == 2
-                V = obj.Xi_true_LV.V;
-                ver_x = V(:, 1);
-                ver_y = V(:, 2);
-                min_x = min(ver_x);
-                max_x = max(ver_x);
-                min_y = min(ver_y);
-                max_y = max(ver_y);
-                LV_samples = zeros(2, N_sam);
-                i = 1;
-                while i <= N_sam
-                    x = (max_x-min_x).*rand(1) + min_x;
-                    y = (max_y-min_y).*rand(1) + min_y;
-                    if all(obj.Xi_true_LV_A*[x; y] <= obj.Xi_true_LV_b)
-                        LV_samples(:, i) = [x; y];
-                        i = i + 1;
-                    end
+            V = obj.Xi_true_LV.V;
+            v_min = min(V, [], 1);
+            v_max = max(V, [], 1);
+            LV_samples = zeros(nx, N_sam);
+            count = 0;
+            max_trials = 1000 * N_sam;
+            trials = 0;
+            while count < N_sam && trials < max_trials
+                x = v_min + (v_max - v_min) .* rand(1, nx);
+                if all(obj.Xi_true_LV_A * x' <= obj.Xi_true_LV_b)
+                    count = count + 1;
+                    LV_samples(:, count) = x';
                 end
-            else
-                % Use MPT3 Polyhedron.uniformSample for nx > 2
-                P_LV = Polyhedron('A', obj.Xi_true_LV_A, 'b', obj.Xi_true_LV_b);
-                LV_samples = P_LV.uniformSample(N_sam)';
+                trials = trials + 1;
+            end
+            if count < N_sam
+                warning('polytope_sample_LV: Only %d samples generated out of %d requested.', count, N_sam);
+                LV_samples = LV_samples(:, 1:count);
             end
         end
         function samples = polytope_sample(obj, N_sam, A, b, V)

@@ -63,14 +63,32 @@ while(alpha > epsilon/(epsilon + Ms))
 end
 
 % Sample from the actual set W
-Sam_num = 5000;
+if nx <= 3
+    Sam_num = 200 * nx; % Use more samples for 3D as well
+else
+    Sam_num = 200 * nx^2; % Significantly increase samples for 4D and higher
+end
+
 try
     % If W has a sample method (MPT3 Polyhedron)
     Sample = W.randomPoint(Sam_num)'; % [nx x Sam_num]
 catch
-    % Fallback: uniform box
-    warning('W.randomPoint failed, using uniform box sampling.');
-    Sample = 50*rand(nx,Sam_num) - 25;
+    % Fallback: uniform box sampling from the polyhedron's bounding box.
+    warning('W.randomPoint failed, using bounding box sampling.');
+    try
+        if isempty(W.V)
+            W.computeVRep(); % Ensure V-rep is available
+        end
+        min_coords = min(W.V, [], 1)';
+        max_coords = max(W.V, [], 1)';
+        
+        % Create random samples within the bounding box
+        spans = max_coords - min_coords;
+        Sample = min_coords + rand(nx, Sam_num) .* spans;
+    catch
+        warning('Could not compute bounding box. Falling back to large box sampling.');
+        Sample = 50*rand(nx,Sam_num) - 25;
+    end
 end
 
 
@@ -101,6 +119,11 @@ if nx == 2
 elseif nx == 3
     [convhull_index,~] = convhull(sample_proj(1,:)', sample_proj(2,:)', sample_proj(3,:)');
     MRPI_W = sample_proj(:,convhull_index);
+    Fs = Polyhedron(MRPI_W');
+elseif nx == 4
+    % Use convhulln for 4D convex hull (facet indices)
+    convhull_index = convhulln(sample_proj');
+    MRPI_W = sample_proj(:, unique(convhull_index(:)));
     Fs = Polyhedron(MRPI_W');
 else
     % For nx > 3, use zonotope approximation with MPT3

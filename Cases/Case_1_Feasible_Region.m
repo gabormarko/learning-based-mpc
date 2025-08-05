@@ -6,9 +6,12 @@ load('parameters_NEW.mat');
 opts_ini_set = parameters.opts_ini_set;
 W = opts_ini_set.W;
 %%
-N_sam_ini = [5; 50; 500; 2000; 20000]; % change |I_0^w|
+N_sam_ini = [50 2000]; % change |I_0^w|
 Alpha_ini = ones(length(N_sam_ini), 1);
-V_ini = ones(2, length(N_sam_ini));
+
+%%% CHANGE!
+V_ini = ones(parameters.opts_ini_set.nx, length(N_sam_ini));
+
 Samples_ini = cell(length(N_sam_ini), 1);
 W_Hat_ini = cell(length(N_sam_ini), 1);
 for k = 1:1:length(N_sam_ini)
@@ -20,7 +23,7 @@ for k = 1:1:length(N_sam_ini)
     Samples_ini{k} = samples;
     W_Hat_ini{k} = (1 - alpha_ini)*v_ini + alpha_ini*W;
 end
-
+%
 Results_1.N_sam_ini = N_sam_ini;
 Results_1.Alpha_ini = Alpha_ini;
 Results_1.V_ini = V_ini;

@@ -67,7 +67,7 @@ classdef ComputeFeasibleRegion < handle
             % compute the value of \nu according to hs
             max_Nu = 100; % Prevent infinite loop
             Nu = obj.N; % Nu must be longer than N
-            disp('IniFeaReg.ComFeasibleRegion_RMPC( )');
+            %disp('IniFeaReg.ComFeasibleRegion_RMPC( )');
             while Nu < max_Nu
                 goal = zeros(obj.nc, 1); % save vector value max{F_bar*(Pis)^(Nu + 1)*z}
                 M = obj.F_bar*(obj.Psi^(Nu + 1));
@@ -128,9 +128,15 @@ classdef ComputeFeasibleRegion < handle
             disp('F_Com matrix:');
             disp(F_Com);            
 
+            disp('SA:'); disp(obj.SA);
+            disp('Sb:'); disp(obj.Sb);
+            P = Polyhedron('A', obj.SA, 'b', obj.Sb);
+            disp(['Is S bounded? ', num2str(P.isBounded)]);
+
             hs    = zeros(obj.nc, 1);
             for i = 1:(obj.nc)
                 hs(i) = full(obj.Com_hs(F_Com(i, :))); % elementwisely get hs vector
+                disp(['F_Com(', num2str(i), '): ', num2str(F_Com(i,:))]);
                 disp(['hs(', num2str(i), ') = ', num2str(hs(i))]);
             end
 
@@ -141,7 +147,7 @@ classdef ComputeFeasibleRegion < handle
                 disp(['hs(', num2str(i), ') = ', num2str(hs(i))]);
             end
             %}
-            
+            disp('ComFeasibleRegion_RMPC');
             Nu = ComNu_RMPC(obj, hs);
 
             Sam_num = 5000;
@@ -169,6 +175,10 @@ classdef ComputeFeasibleRegion < handle
                 [convhull_index, ~] = convhull(sample_proj');
                 F_Ns = sample_proj(:, convhull_index);
                 F_Ns = Polyhedron(F_Ns');
+            elseif obj.nx == 4
+                convhull_index = convhulln(sample_proj');
+                F_Ns = sample_proj(:, unique(convhull_index(:)));
+                F_Ns = Polyhedron(F_Ns');
             else
                 warning('Convex hull computation not supported for nx > 3. Using Zonotope class (MPT3) for high-dimensional cases.');
                 % Use Zonotope for high-dimensional case (MPT3)
@@ -191,7 +201,7 @@ classdef ComputeFeasibleRegion < handle
             
             F_N  = F_Ns + obj.S;
         end
-
+        %{
         function [F_N, hs_true] = ComFeasibleRegion_True(obj)
             % compute the feasible region of s_0|k with S_true
             % outputs the feasible region F_N, hs value hs_true
@@ -200,7 +210,8 @@ classdef ComputeFeasibleRegion < handle
             for i   = 1:1:obj.nc
                 hs_true(i) = full(obj.Com_hs_true(F_Com(i, :))); % elementwisely get hs vector
             end
-
+            
+            disp('ComFeasibleRegion_True');
             Nu_true = ComNu_RMPC(obj, hs_true);
             
             Sam_num = 5000;
@@ -226,6 +237,10 @@ classdef ComputeFeasibleRegion < handle
                 [convhull_index, ~] = convhull(sample_proj');
                 F_Ns = sample_proj(:, convhull_index);
                 F_Ns = Polyhedron(F_Ns');
+            elseif obj.nx == 4
+                convhull_index = convhulln(sample_proj');
+                F_Ns = sample_proj(:, unique(convhull_index(:)));
+                F_Ns = Polyhedron(F_Ns');
             else
                 warning('Convex hull computation not supported for nx > 3. Using Zonotope class (MPT3) for high-dimensional cases.');
                 % Use Zonotope for high-dimensional case (MPT3)
@@ -236,6 +251,79 @@ classdef ComputeFeasibleRegion < handle
             end
             
             F_N  = F_Ns + obj.S_true;
+        end
+        %}
+
+        function [F_N, hs_true] = ComFeasibleRegion_True(obj)
+            % compute the feasible region of s_0|k with S_true
+            % outputs the feasible region F_N, hs value hs_true
+            F_Com   = obj.F + obj.G*obj.K; % [F + GK]
+            hs_true = zeros(obj.nc, 1);
+            disp('SA_true:'); disp(obj.SA_true);
+            disp('Sb_true:'); disp(obj.Sb_true);
+            P_true = Polyhedron('A', obj.SA_true, 'b', obj.Sb_true);
+            disp(['Is S_true bounded? ', num2str(P_true.isBounded)]);
+            disp(['Is S_true empty? ', num2str(P_true.isEmptySet)]);
+            if isempty(obj.SA_true) || isempty(obj.Sb_true) || P_true.isEmptySet || ~P_true.isBounded
+                warning('S_true is empty, unbounded, or degenerate. Fallback to default box.');
+                P_true = Polyhedron('V', eye(obj.nx)*0.01); % fallback box
+                obj.SA_true = P_true.A;
+                obj.Sb_true = P_true.b;
+            end
+            for i   = 1:1:obj.nc
+                hs_true(i) = full(obj.Com_hs_true(F_Com(i, :))); % elementwisely get hs vector
+            end
+            if any(isnan(hs_true)) || any(isinf(hs_true)) || any(abs(hs_true) > 1e6)
+                warning('hs_true contains invalid values. Feasible region may be empty or degenerate.');
+                hs_true = min(max(hs_true, -1e6), 1e6); % cap extreme values
+            end
+
+            disp('ComFeasibleRegion_True');
+            Nu_true = ComNu_RMPC(obj, hs_true);
+
+            Sam_num = 5000;
+            Sample  = 50*rand(obj.nx, Sam_num) - 25;
+            yalmip('clear')
+            z       = sdpvar(size(obj.Psi, 2), 1);
+            proj_sample  = sdpvar(obj.nx, 1);
+            Input_sample = sdpvar(obj.nx, 1);
+            cns = [];
+            for i   = 0:1:Nu_true
+                cns = [cns,obj.F_bar*(obj.Psi^i)*z <= ones(obj.nc, 1) - hs_true];
+            end
+            cns     = [cns,z(1:obj.nx) == proj_sample];
+            J       = (proj_sample - Input_sample)'*(proj_sample - Input_sample);
+            ops     = sdpsettings('relax', 0);
+            Fea_Set = optimizer(cns, J, ops, Input_sample, proj_sample);
+
+            % evaluate the function and form a convexhull
+            sample_proj = nan(obj.nx, Sam_num); % preallocate
+            parfor k = 1:Sam_num
+                try
+                    [sample_proj(:,k),~] = Fea_Set(Sample(:,k));
+                catch ME
+                    warning('Sample projection failed at k=%d: %s', k, ME.message);
+                    sample_proj(:,k) = NaN;
+                end
+            end
+            valid_idx = all(~isnan(sample_proj),1);
+            sample_proj_valid = sample_proj(:,valid_idx);
+            if obj.nx <= 3 && size(sample_proj_valid,2) > obj.nx
+                [convhull_index, ~] = convhull(sample_proj_valid');
+                F_Ns = sample_proj_valid(:, convhull_index);
+                F_Ns = Polyhedron(F_Ns');
+            elseif obj.nx == 4 && size(sample_proj_valid,2) > obj.nx
+                convhull_index = convhulln(sample_proj_valid');
+                F_Ns = sample_proj_valid(:, unique(convhull_index(:)));
+                F_Ns = Polyhedron(F_Ns');
+            else
+                warning('Convex hull computation not supported for nx > 3 or insufficient valid samples. Using Zonotope class (MPT3) for high-dimensional cases.');
+                center = mean(sample_proj_valid, 2); % mean of samples
+                generators = sample_proj_valid - center; % each column is a generator
+                F_Ns = Zonotope(center, generators);
+            end
+
+            F_N  = F_Ns + P_true;
         end
         
         function [F_N_hat_opt, hs_hat_opt] = ComFeasibleRegion_UQOPT(obj)
@@ -248,6 +336,7 @@ classdef ComputeFeasibleRegion < handle
                 hs_hat_opt(i) = full(obj.Com_hs_hat_opt(F_Com(i, :))); % elementwisely get hs vector
             end
 
+            disp('ComFeasibleRegion_UQOPT');
             Nu_hat_opt = ComNu_RMPC(obj, hs_hat_opt);
             
             Sam_num = 5000;
@@ -273,6 +362,10 @@ classdef ComputeFeasibleRegion < handle
                 [convhull_index, ~] = convhull(sample_proj');
                 F_Ns_hat_opt = sample_proj(:,convhull_index);
                 F_Ns_hat_opt = Polyhedron(F_Ns_hat_opt');
+            elseif obj.nx == 4
+                convhull_index = convhulln(sample_proj');
+                F_Ns_hat_opt = sample_proj(:, unique(convhull_index(:)));
+                F_Ns_hat_opt = Polyhedron(F_Ns_hat_opt');
             else
                 warning('Convex hull computation not supported for nx > 3. Using Zonotope class (MPT3) for high-dimensional cases.');
                 % Use Zonotope for high-dimensional case (MPT3)
@@ -293,6 +386,8 @@ classdef ComputeFeasibleRegion < handle
             for i     = 1:1:obj.nc
                 hs(i) = full(obj.Com_hs(F_Com(i, :))); % elementwisely get hs vector
             end
+
+            disp('ComFeasibleRegion_UQMPC');
             Nu = ComNu_RMPC(obj, hs);
             
             Nu_k = Com_Nuk(obj, h_k, hs, Nu); % compute \nu_k according to Alg. 1
@@ -320,6 +415,10 @@ classdef ComputeFeasibleRegion < handle
             if obj.nx <= 3
                 [convhull_index, ~] = convhull(sample_proj');
                 F_Ns = sample_proj(:, convhull_index);
+                F_Ns = Polyhedron(F_Ns');
+            elseif obj.nx == 4
+                convhull_index = convhulln(sample_proj');
+                F_Ns = sample_proj(:, unique(convhull_index(:)));
                 F_Ns = Polyhedron(F_Ns');
             else
                 warning('Convex hull computation not supported for nx > 3. Using Zonotope class (MPT3) for high-dimensional cases.');

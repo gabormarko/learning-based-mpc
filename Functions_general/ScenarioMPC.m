@@ -100,6 +100,96 @@ classdef ScenarioMPC < handle
             optimizer = opti.to_function('f', {x_k_full, scenarios}, {U});
         end
         
+        
+        function EV_samples = polytope_sample_EV(obj, N_sam)
+            dim = size(obj.Xi_true_EV_A, 2);
+            if dim <= 2
+                V = obj.Xi_true_EV.V;
+                ver_x = V(:, 1);
+                ver_y = V(:, 2);
+                min_x = min(ver_x);
+                max_x = max(ver_x);
+                min_y = min(ver_y);
+                max_y = max(ver_y);
+                EV_samples = zeros(2, N_sam);
+                i = 1;
+                while i <= N_sam
+                    x = (max_x-min_x).*rand(1) + min_x;
+                    y = (max_y-min_y).*rand(1) + min_y;
+                    if all(obj.Xi_true_EV_A*[x; y] <= obj.Xi_true_EV_b)
+                        EV_samples(:, i) = [x; y];
+                        i = i + 1;
+                    end
+                end
+            else
+                % Rejection sampling for dim > 2
+                V = obj.Xi_true_EV.V;
+                v_min = min(V, [], 1);
+                v_max = max(V, [], 1);
+                EV_samples = zeros(dim, N_sam);
+                count = 0;
+                max_trials = 1000 * N_sam;
+                trials = 0;
+                while count < N_sam && trials < max_trials
+                    x = v_min + (v_max - v_min) .* rand(1, dim);
+                    if all(obj.Xi_true_EV_A * x' <= obj.Xi_true_EV_b)
+                        count = count + 1;
+                        EV_samples(:, count) = x';
+                    end
+                    trials = trials + 1;
+                end
+                if count < N_sam
+                    warning('polytope_sample_EV: Only %d samples generated out of %d requested.', count, N_sam);
+                    EV_samples = EV_samples(:, 1:count);
+                end
+            end
+        end
+        
+        function LV_samples = polytope_sample_LV(obj, N_sam)
+            dim = size(obj.Xi_true_LV_A, 2);
+            if dim <= 2
+                V = obj.Xi_true_LV.V;
+                ver_x = V(:, 1);
+                ver_y = V(:, 2);
+                min_x = min(ver_x);
+                max_x = max(ver_x);
+                min_y = min(ver_y);
+                max_y = max(ver_y);
+                LV_samples = zeros(2, N_sam);
+                i = 1;
+                while i <= N_sam
+                    x = (max_x-min_x).*rand(1) + min_x;
+                    y = (max_y-min_y).*rand(1) + min_y;
+                    if all(obj.Xi_true_LV_A*[x; y] <= obj.Xi_true_LV_b)
+                        LV_samples(:, i) = [x; y];
+                        i = i + 1;
+                    end
+                end
+            else
+                % Rejection sampling for dim > 2
+                V = obj.Xi_true_LV.V;
+                v_min = min(V, [], 1);
+                v_max = max(V, [], 1);
+                LV_samples = zeros(dim, N_sam);
+                count = 0;
+                max_trials = 1000 * N_sam;
+                trials = 0;
+                while count < N_sam && trials < max_trials
+                    x = v_min + (v_max - v_min) .* rand(1, dim);
+                    if all(obj.Xi_true_LV_A * x' <= obj.Xi_true_LV_b)
+                        count = count + 1;
+                        LV_samples(:, count) = x';
+                    end
+                    trials = trials + 1;
+                end
+                if count < N_sam
+                    warning('polytope_sample_LV: Only %d samples generated out of %d requested.', count, N_sam);
+                    LV_samples = LV_samples(:, 1:count);
+                end
+            end
+        end        
+        
+        %{
         function EV_samples = polytope_sample_EV(obj, N_sam)
             dim = size(obj.Xi_true_EV_A, 2);
             if dim <= 2
@@ -150,7 +240,7 @@ classdef ScenarioMPC < handle
                 P = Polyhedron('A', obj.Xi_true_LV_A, 'b', obj.Xi_true_LV_b);
                 LV_samples = P.uniformSample(N_sam)';
             end
-        end
-        
+        end        
+        %}
     end
 end

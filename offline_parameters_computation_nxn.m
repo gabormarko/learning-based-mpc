@@ -420,7 +420,7 @@ catch ME
 end
 
 % --- Timing: MRPI S_true ---
-max_vertices = 40;
+max_vertices = 50;
 if size(W_true.V,1) > max_vertices
     warning('Reducing W_true vertices for MRPISet...');
     idx = randperm(size(W_true.V,1), max_vertices);
@@ -770,7 +770,7 @@ feas_str = '';
 if exist('Nu_RMPC','var')
     feas_str = ['_feas', num2str(Nu_RMPC/opts_RMPC.N, '%.3f')];
 end
-save(['parameters_FINAL_nx', num2str(nx), feas_str, '_3.mat'], 'parameters');
+save(['parameters_FINAL_nx', num2str(nx), feas_str, '_4.mat'], 'parameters');
 
 fprintf('\nComputation time: %.2f seconds\n', stats.elapsedTime)
 
