@@ -1,5 +1,14 @@
 # Learning-based Rigid Tube Model Predictive Control
-This repository contains code for the article
+Code implementation for the Learning-based Rigid Tube Model Predictive
+Control project as part of the Practical Course Motion planning for the autonomous vehicle EDGAR SS2025.
+
+## Abstract
+In this report we address model predictive control (MPC) for discrete-time linear systems subject to bounded additive disturbances, where the true disturbance set is unknown. Building on the learning-based rigid tube MPC framework, which integrates conservative prior knowledge with online disturbance learning, we extend its implementation to support higher-dimensional systems. The disturbance set is parametrized as a homothetic transformation of a conservative prior, enabling efficient construction and update of the rigid tube that bounds disturbance propagation.
+
+We modularize all core components of the learning-based rigid tube MPC framework to support higher-order systems. To evaluate performance in higher dimensions, we conduct a scalability analysis of the core components, including disturbance learning, set calculations, tube updates, and optimization problems. We analyze the scalability of the proposed method through complexity calculations and simulations on 3D and 4D systems. Comparative results with baseline rigid tube MPC and scenario MPC demonstrate that our generalized approach maintains reduced conservatism, robust constraint satisfaction, and computational feasibility for real-time control in higher-order systems.
+
+## General information
+This repository is an extension for the codebase for the following article:
 ```
 @inproceedings{gao2024learning,
   title={Learning-based Rigid Tube Model Predictive Control},
@@ -9,7 +18,10 @@ This repository contains code for the article
   pages={}
 } 
 ```
-which has been accepted for presentation and publication at the 6th Annual Learning for Dynamics & Control Conference (L4DC), 2024.
+
+Although the theoretical framework presented in the article supports arbitrary state and input dimensions, the original codebase (https://github.com/Safe-Autonomy-and-Intelligence-Lab/learning-based-rigid-tube-rmpc) was limited to 2D systems. In this repository, we refactored the control pipeline into modular, simension-agnostic components to ensure general applicability.
+
+
 ## Packages for running the code
 To run the code you need to install:
 
@@ -19,10 +31,14 @@ To run the code you need to install:
 
 ## Introduction to the files
 
-## offline_parameters_computation.m
-Calculate and define all parameters and save the results in **parameters.mat**. Since the parameters have been provided in the repository, if you do not want to update those values you can avoid running this file.
+## offline_parameters_computation_nxn.m
+Generalized version of the `offline_parameters_computation.m` file.
+Calculate and define all parameters and save the results in **parameters_{nx}x{nx}.mat**. Since the parameters have been provided in the repository, if you do not want to update those values you can avoid running this file.
 
-## Functions
+This file is modularized, meaning the dimensions of the state space representation can be set also to higher dimensions. Tested for nx={2,3,4}  dimensional systems.
+
+## Functions_general
+Generalized version of all of the functions in the original `Functions` folder.
 ### MRPISet.m:
 
 Compute the minimum robust positive invariant set $\mathbb{S}$.
@@ -51,7 +67,8 @@ The proposed uncertainty quantification-based Robust MPC controller.
 ### ScenarioMPC.m:
 The scenario MPC controller.
 
-## Cases
+## Cases_general
+Generalized version of all of the scripts in the original `Cases` folder.
 
 ### Case_1_Feasible_Region.m
 Compute the feasible region of UQ-RMPC and nominal RMPC, results are saved in **Results/Results_1.mat**, and figures are produced by **Results/Fig_Case_1.m**.
@@ -71,7 +88,10 @@ Monte-Carlo simulation to evaluate the feasibility of UQ-RMPC with different ini
 ### Case_6_Compare_With_SCMPC.m
 Comparing the computation time with Scenario MPC.
 
+## Visualizing 3D results
+To visualize 3D disturbance sets and feasible regions, run the `visualize_3d_results.m` script with the corresponding `parameters_3x3.mat` and `Results_1_3x3.mat` files.
+
 ## Some implementation details
-(1) It is not necessary to run **offline_parameters_computation.m** if you do not want to update the parameter values, but you need to run **run_first.m** to add the path of folders.
+(1) It is not necessary to run **offline_parameters_computation_nxn.m** if you do not want to update the parameter values, but you need to run **run_first.m** to add the path of folders.
 
 (2) In the article, the horizon $\nu_k$ is updated according to Algorithm 1, but this will change the number of constraints of MPC. In our code, we implemented Algorithm 1 and found that $\nu_k$ is almost equal to $\nu_s$. Therefore, we use $\nu_s$ to replace $\nu_k$. In practical applications, we can make $\nu_k$ long enough such that the condition on $\nu_k$ will be satisfied. For example, a suggestion can be $\nu_k = 2\nu_s$.
