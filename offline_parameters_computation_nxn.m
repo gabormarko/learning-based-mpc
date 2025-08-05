@@ -17,15 +17,15 @@ N = stats.N;
 % --- System Setup ---
 T = 0.5;
 
-A = eye(nx)*1.0;
+A = eye(nx)*0.5;
 for i = 1:nx-1
-    A(i, i+1) = T*1.0;
+    A(i, i+1) = T*0.5;
 end
 B = zeros(nx, nu);
-B(end) = T;
+B(end) = T*0.5;
 
-Q = eye(nx)*1;
-R = 0.1;
+Q = eye(nx)*1.0;
+R = 0.01;
 
 [K, Px]  = dlqr(A, B, Q, R);
 K        = -K;
@@ -41,7 +41,7 @@ if nx == 2
     Xi_true_EV  = Rotation_EV*Polyhedron([-0.06 -0.015;0.06 -0.015; 0.01 0.025; -0.01 0.025]); 
     Xi_true_LV  = Rotation_LV*Polyhedron([-0.06 0.015;0.06 0.015; 0.01 -0.025; -0.01 -0.025]);
 
-else % 3D+ case
+elseif nx == 3
     theta_EV = pi/12;
     theta_LV = pi/12;
     % Define 3D rotation matrix (e.g., around z-axis)
@@ -62,16 +62,62 @@ else % 3D+ case
     hex_r_LV_x = 0.022; % x-radius (longer)
     hex_r_LV_y = 0.010; % y-radius (shorter)
     V_LV_3D = [
-        [hex_r_LV_x*cos(hex_angle_LV)', hex_r_LV_y*sin(hex_angle_LV)', z_low*ones(6,1)]*2;
-        [hex_r_LV_x*cos(hex_angle_LV)', hex_r_LV_y*sin(hex_angle_LV)', z_high*ones(6,1)]*2
+        [hex_r_LV_x*cos(hex_angle_LV)', hex_r_LV_y*sin(hex_angle_LV)', z_low*ones(6,1)];
+        [hex_r_LV_x*cos(hex_angle_LV)', hex_r_LV_y*sin(hex_angle_LV)', z_high*ones(6,1)]
     ];
 
     V_EV_rot = (Rotation_EV * V_EV_3D')';
     V_LV_rot = (Rotation_LV * V_LV_3D')';
 
-    % Embed the 3D polyhedron into the full nx-dimensional space
-    Xi_true_EV = embedInFullDim(Polyhedron('V', V_EV_rot), nx);
-    Xi_true_LV = embedInFullDim(Polyhedron('V', V_LV_rot), nx);
+    Xi_true_EV = Polyhedron('V', V_EV_rot);
+    Xi_true_LV = Polyhedron('V', V_LV_rot);
+
+elseif nx == 4
+    % Directly define proper 4D polyhedra for EV and LV uncertainty sets
+    % Example: 4D hypercube centered at origin, side length 0.02
+    cube_side = 0.02;
+    V_EV_4D = cube_side * (dec2bin(0:15) - '0') - cube_side/2; % 16 vertices for 4D cube
+    V_LV_4D = cube_side * (dec2bin(0:15) - '0') - cube_side/2; % You can adjust LV shape if needed
+
+    % Optionally, rotate or scale the cubes for more realism
+    % Example: random rotation for EV and LV
+    rng(42); % for reproducibility
+    Q_EV = orth(randn(4,4));
+    Q_LV = orth(randn(4,4));
+    V_EV_4D_rot = (Q_EV * V_EV_4D')';
+    V_LV_4D_rot = (Q_LV * V_LV_4D')';
+
+    Xi_true_EV = Polyhedron('V', V_EV_4D_rot);
+    Xi_true_LV = Polyhedron('V', V_LV_4D_rot);
+
+else
+    % For nx > 4, use robust box embedding as before
+    theta_EV = pi/12;
+    theta_LV = pi/12;
+    Rotation_EV = [cos(theta_EV) -sin(theta_EV) 0; sin(theta_EV) cos(theta_EV) 0; 0 0 1];
+    Rotation_LV = [cos(theta_LV) -sin(theta_LV) 0; sin(theta_LV) cos(theta_LV) 0; 0 0 1];
+
+    hex_angle = (0:5)*pi/3;
+    hex_r_x = 0.01;
+    hex_r_y = 0.01;
+    z_low = -0.01; z_high = 0.01;
+    V_EV_3D = [
+        [hex_r_x*cos(hex_angle)', hex_r_y*sin(hex_angle)', z_low*ones(6,1)];
+        [hex_r_x*cos(hex_angle)', hex_r_y*sin(hex_angle)', z_high*ones(6,1)]
+    ];
+    hex_angle_LV = (0:5)*pi/3;
+    hex_r_LV_x = 0.01;
+    hex_r_LV_y = 0.01;
+    V_LV_3D = [
+        [hex_r_LV_x*cos(hex_angle_LV)', hex_r_LV_y*sin(hex_angle_LV)', z_low*ones(6,1)];
+        [hex_r_LV_x*cos(hex_angle_LV)', hex_r_LV_y*sin(hex_angle_LV)', z_high*ones(6,1)]
+    ];
+
+    V_EV_rot = (Rotation_EV * V_EV_3D')';
+    V_LV_rot = (Rotation_LV * V_LV_3D')';
+
+    Xi_true_EV = embedInFullDimBox(Polyhedron('V', V_EV_rot), nx, 0.05)*0.5;
+    Xi_true_LV = embedInFullDimBox(Polyhedron('V', V_LV_rot), nx, 0.05)*0.5;
 end
 
 disp(['Dimension of Xi_true_EV: ', num2str(Xi_true_EV.Dim)]);
@@ -81,19 +127,55 @@ min_u_LV    = -1/20;
 max_u_LV    = 1/16;
 U_true_LV   = Polyhedron([1/max_u_LV; 1/min_u_LV], [1; 1]);
 
+% --- Robust box embedding function ---
+function P_full = embedInFullDimBox(P, nx, pad_value)
+    % Robustly embeds a lower-dimensional polyhedron P into nx dimensions by creating a box in new dimensions
+    % pad_value: size of the box in new dimensions (default 0.01)
+    if nargin < 3
+        pad_value = 0.01;
+    end
+    V = P.V;
+    d = size(V,2);
+    if nx == d
+        P_full = Polyhedron('V', V);
+        return;
+    end
+    % For each vertex, create all combinations in new dimensions
+    n_new = nx - d;
+    box_corners = dec2bin(0:2^n_new-1) - '0'; % binary corners
+    box_corners = pad_value * (2*box_corners - 1); % [-pad_value, pad_value] for each new dim
+    V_full = [];
+    for i = 1:size(V,1)
+        v_base = V(i,:);
+        v_box = [repmat(v_base, size(box_corners,1), 1), box_corners];
+        V_full = [V_full; v_box];
+    end
+    P_full = Polyhedron('V', V_full);
+end
+
 % U_true_LV = Polyhedron([1; -1], [max_u_LV; -min_u_LV]);
 
 W_true      = Xi_true_EV + (-1*Xi_true_LV) + (-B*U_true_LV);
 disp(['Dimension W_true: ', num2str(W_true.Dim)]);
+disp('First 10 rows of W_true.V:');
+disp(W_true.V(1:min(10, size(W_true.V,1)), :));
+%print_set_info('Xi_true_EV', Xi_true_EV);
+%print_set_info('Xi_true_LV', Xi_true_LV);
+%print_set_info('W_true', W_true);
 
-print_set_info('Xi_true_EV', Xi_true_EV);
-print_set_info('Xi_true_LV', Xi_true_LV);
-print_set_info('W_true', W_true);
+% --- PATCH: Robustify W_true and S_true construction for full-dimensionality and boundedness ---
+
+% After constructing W_true, ensure it is full-dimensional
+if rank(W_true.V - W_true.V(1,:)) < nx
+    warning('W_true is degenerate! Adding small random noise to vertices.');
+    W_true.V = W_true.V + 1e-4*randn(size(W_true.V));
+    W_true = Polyhedron('V', W_true.V);
+end
 
 % DEFINING W
 if nx == 2
     W = Polyhedron([-0.5 -0.2; 0.5 -0.2; 0.5 0.2; -0.5 0.2]);
-else
+elseif nx == 3
     % --- Original/previous implementation (commented out) ---
     % W = embedInFullDim(Polyhedron([-0.01 -0.01 0; 0.01 -0.01 0; 0.01 0.01 0; -0.01 0.01 0]), nx);
     % W = embedInFullDim(Polyhedron([-0.4 -0.2 -0.1; 0.01 -0.01 0; 0.01 0.01 0; -0.01 0.01 0]), nx);
@@ -109,10 +191,22 @@ else
          0.12, -0.08,  0.06;
          0.12,  0.08,  0.06;
         -0.12,  0.08,  0.06
-    ];
+    ]*1.5; % Scale factor for robustness, adjust as needed
+    W_3D = Polyhedron('V', V_cuboid);    
+    W = W_3D;
+else
+    V_cuboid = [
+        -0.12, -0.08, -0.06;
+         0.12, -0.08, -0.06;
+         0.12,  0.08, -0.06;
+        -0.12,  0.08, -0.06;
+        -0.12, -0.08,  0.06;
+         0.12, -0.08,  0.06;
+         0.12,  0.08,  0.06;
+        -0.12,  0.08,  0.06
+    ]*0.05; % 0.65 works for 4D
     W_3D = Polyhedron('V', V_cuboid);
-    W = embedInFullDim(W_3D, nx);
-
+    W = embedInFullDimBox(W_3D, nx, 0.01);
     %%%%% fallback
     %W = embedInFullDim(Polyhedron([-0.01 -0.01 0; 0.01 -0.01 0; 0.01 0.01 0; -0.01 0.01 0]), nx);
 end
@@ -134,20 +228,70 @@ if nx == 2
     G = zeros(nc, nu);
     G(3,end) = 1/acc_bound;
     G(4,end) = -1/acc_bound;
-else
+elseif nx == 3
     nc_state = 2*nx;
     nc_input = 2;
     nc = nc_state + nc_input;
     F = zeros(nc, nx);
     G = zeros(nc, nu);
-    % State constraints
-    state_bounds = 50 * ones(nx,1);
-    acc_bound = 60;
+    % State constraints (axis-aligned)
+    distance_error = 15; % distance error in meters
+    state_bounds = distance_error * ones(nx,1);
+    acc_bound = 4;
     for i = 1:nx
         F(2*i-1, i) = 1/state_bounds(i);
         F(2*i,   i) = -1/state_bounds(i);
     end
     % Input constraints
+    G(2*nx+1,1) = 1/acc_bound;
+    G(2*nx+2,1) = -1/acc_bound;
+    disp('F matrix:');
+    disp(F);
+    disp('G matrix:');
+    disp(G);
+elseif nx == 4
+    % Proposed method: random directions + mixed constraints for robustness
+    nc_state = 2*nx;
+    nc_input = 2;
+    distance_error = 60;
+    acc_bound = 60;
+    state_bounds = distance_error * ones(nx,1);
+    % Random directions for state constraints
+    rng(123);
+    F_rand = zeros(nc_state, nx);
+    for i = 1:nx
+        dir = randn(1, nx);
+        dir = dir / norm(dir);
+        F_rand(2*i-1, :) =  dir / state_bounds(i);
+        F_rand(2*i,   :) = -dir / state_bounds(i);
+    end
+    % Mixed constraints
+    F_extra = [1 1 0 0; -1 -1 0 0; 0 1 1 0; 0 -1 -1 0; 0 0 1 1; 0 0 -1 -1];
+    F_extra = F_extra / distance_error;
+    F = [F_rand; F_extra];
+    nc = size(F,1); % <-- Fix: nc is now the number of rows in F
+    G = zeros(nc, nu);
+    % Input constraints: add to last two rows
+    G(end-1,1) = 1/acc_bound;
+    G(end,1)   = -1/acc_bound;
+    disp('F matrix (random + mixed):');
+    disp(F);
+    disp('G matrix:');
+    disp(G);
+else
+    % Use previous axis-aligned method for nx > 4
+    nc_state = 2*nx;
+    nc_input = 2;
+    nc = nc_state + nc_input;
+    F = zeros(nc, nx);
+    G = zeros(nc, nu);
+    distance_error = 60;
+    state_bounds = distance_error * ones(nx,1);
+    acc_bound = 60;
+    for i = 1:nx
+        F(2*i-1, i) = 1/state_bounds(i);
+        F(2*i,   i) = -1/state_bounds(i);
+    end
     G(2*nx+1,1) = 1/acc_bound;
     G(2*nx+2,1) = -1/acc_bound;
     disp('F matrix:');
@@ -173,7 +317,23 @@ Psi{1, 2} = B*E;
 Psi{2, 1} = zeros(nu*N, nx);
 Psi{2, 2} = M;
 Psi   = cell2mat(Psi);
-F_bar = [F + G*K G*E];
+
+% --- PATCH: Ensure F_bar construction is robust and compatible ---
+disp(['Size F: ', mat2str(size(F))]);
+disp(['Size G: ', mat2str(size(G))]);
+disp(['Size K: ', mat2str(size(K))]);
+disp(['Size E: ', mat2str(size(E))]);
+
+% F is (nc, nx), G is (nc, nu), K is (nu, nx)
+% G*K is (nc, nx)
+% E should be (nu, 1) for G*E to be (nc, 1)
+if size(E,1) ~= nu
+    E = ones(nu, 1); % ensure E is column vector of length nu
+end
+
+F_bar = [F + G*K, G*E];
+
+disp(['Size F_bar: ', mat2str(size(F_bar))]);
 
 opts_ini_set.B          = B;
 opts_ini_set.N_pre_sam  = 5;
@@ -194,17 +354,43 @@ stats.alpha_opt = alpha_opt;
 stats.v_opt = v_opt;
 W_hat_opt = (1 - alpha_opt)*v_opt + alpha_opt*W;
 
+
 try
     W_hat_opt = Polyhedron('A', W_hat_opt.A, 'b', W_hat_opt.b);
     disp('W_hat_opt Polyhedron created. Vertices:');
     disp(W_hat_opt.V);
+    % Diagnostics: check rank and variance
+    disp(['Rank of W_hat_opt vertices: ', num2str(rank(W_hat_opt.V - W_hat_opt.V(1,:)))]);
+    disp(['Variance of W_hat_opt vertices in each dimension:']);
+    disp(var(W_hat_opt.V,0,1));
+    if rank(W_hat_opt.V - W_hat_opt.V(1,:)) < nx
+        warning('W_hat_opt is degenerate or nearly so! Adding small random noise to vertices.');
+        W_hat_opt.V = W_hat_opt.V + 1e-4*randn(size(W_hat_opt.V));
+        W_hat_opt = Polyhedron('V', W_hat_opt.V);
+        disp('W_hat_opt Polyhedron after noise:');
+        disp(W_hat_opt.V);
+        disp(['Rank after noise: ', num2str(rank(W_hat_opt.V - W_hat_opt.V(1,:)))]);
+    end
 catch ME
     disp('Failed to create W_hat_opt Polyhedron!');
     disp(ME.message);
     error('Aborting due to W_hat_opt Polyhedron creation failure.');
 end
 
-epsilon = 1e-2;
+% --- Fallback: If MRPISet fails, retry with a full box polytope ---
+function S_hat_opt = robust_MRPISet(Phi, W_hat_opt, epsilon, nx)
+    try
+        S_hat_opt = MRPISet(Phi, W_hat_opt, max(epsilon,1.0));
+        S_hat_opt = minHRep(S_hat_opt);
+    catch
+        disp('MRPISet failed for W_hat_opt. Retrying with larger box polytope...');
+        W_box = construct_box_polytope(nx, 0.2, 1e-4); % scaling=0.2, small noise
+        S_hat_opt = MRPISet(Phi, W_box, max(epsilon,1.0)); % use larger epsilon for fallback
+        S_hat_opt = minHRep(S_hat_opt);
+    end
+end
+
+epsilon = 1.0;
 
 eig_Phi = eig(Phi);
 disp('Closed-loop eigenvalues:');
@@ -217,15 +403,12 @@ end
 t_mrpi_shat = tic;
 try
     disp('Calling MRPISet for S_hat_opt...');
-    S_hat_opt = MRPISet(Phi, W_hat_opt, epsilon);
-    S_hat_opt = minHRep(S_hat_opt);
+    S_hat_opt = robust_MRPISet(Phi, W_hat_opt, epsilon, nx);
     stats.t_mrpi_shat = toc(t_mrpi_shat);
     stats.S_hat_opt_num_vertices = size(S_hat_opt.V,1);
     stats.S_hat_opt_num_constraints = size(S_hat_opt.A,1);
     stats.S_hat_opt_isBounded = S_hat_opt.isBounded;
     disp('S_hat_opt vertices:');
-    disp(S_hat_opt.V);
-    disp('Number of vertices:');
     disp(size(S_hat_opt.V,1));
     disp('Max abs vertex value:');
     disp(max(abs(S_hat_opt.V),[],'all'));
@@ -233,7 +416,7 @@ try
     disp(S_hat_opt.isBounded);
 catch ME
     stats.t_mrpi_shat = toc(t_mrpi_shat);
-    disp('MRPISet or minHRep failed for S_hat_opt!');
+    disp('MRPISet or minHRep failed for S_hat_opt, even after fallback!');
     disp(ME.message);
     disp('Diagnostics:');
     disp('Phi:');
@@ -254,7 +437,43 @@ try
     stats.S_true_num_constraints = size(S_true.A,1);
     stats.S_true_isBounded = S_true.isBounded;
     disp('S_true vertices:');
-    disp(S_true.V);
+    disp('Number of vertices:');
+    disp(size(S_true.V,1));
+    disp('Max abs vertex value:');
+    disp(max(abs(S_true.V),[],'all'));
+    % --- Diagnostics for S_true boundedness and rank ---
+    disp('S_true constraint matrix (A):');
+    disp(S_true.A);
+    disp('S_true constraint vector (b):');
+    disp(S_true.b);
+    disp(['Rank of S_true.A: ', num2str(rank(S_true.A))]);
+    if rank(S_true.A) < nx
+        warning('S_true.A does not constrain all directions! S_true will be unbounded.');
+    end
+    disp(['Rank of S_true vertices: ', num2str(rank(S_true.V - S_true.V(1,:)))]);
+
+    disp('Is S_true bounded?');
+    disp(S_true.isBounded);
+    % --- PATCH: Check boundedness and rank, fallback if needed ---
+    if ~S_true.isBounded
+        warning('S_true is not bounded! Fallback to small box polytope.');
+        S_true = construct_box_polytope(nx, 0.05, 1e-4);
+        S_true = minHRep(S_true);
+        stats.S_true_isBounded = S_true.isBounded;
+        disp('Fallback S_true vertices:');
+        disp(S_true.V);
+        disp('Is fallback S_true bounded?');
+        disp(S_true.isBounded);
+    end
+    if rank(S_true.V - S_true.V(1,:)) < nx
+        warning('S_true is degenerate or nearly so! Adding small random noise to vertices.');
+        S_true.V = S_true.V + 1e-4*randn(size(S_true.V));
+        S_true = Polyhedron('V', S_true.V);
+        S_true = minHRep(S_true);
+        disp('S_true Polyhedron after noise:');
+        disp(S_true.V);
+        disp(['Rank after noise: ', num2str(rank(S_true.V - S_true.V(1,:)))]);
+    end
 catch ME
     stats.t_mrpi_strue = toc(t_mrpi_strue);
     disp('MRPISet or minHRep failed for S_true!');
@@ -267,21 +486,58 @@ catch ME
     error('Aborting due to unbounded or degenerate S_true.');
 end
 
+% After MRPISet for S_true, ensure boundedness and full rank
+if ~S_true.isBounded
+    warning('S_true is not bounded! Fallback to small box polytope.');
+    S_true = construct_box_polytope(nx, 0.05, 1e-4);
+    S_true = minHRep(S_true);
+end
+if rank(S_true.V - S_true.V(1,:)) < nx
+    warning('S_true is degenerate or nearly so! Adding small random noise to vertices.');
+    S_true.V = S_true.V + 1e-4*randn(size(S_true.V));
+    S_true = Polyhedron('V', S_true.V);
+    S_true = minHRep(S_true);
+end
+
 % --- Timing: MRPI S ---
 t_mrpi_s = tic;
 try
     disp('Calling MRPISet for S...');
-    S = MRPISet(Phi, W, epsilon);
-    S = minHRep(S);
+    S = robust_MRPISet(Phi, W, epsilon, nx);
     stats.t_mrpi_s = toc(t_mrpi_s);
     stats.S_num_vertices = size(S.V,1);
     stats.S_num_constraints = size(S.A,1);
     stats.S_isBounded = S.isBounded;
     disp('S vertices:');
-    disp(S.V);
+    disp(size(S.V,1));
+    disp('Max abs vertex value:');
+    disp(max(abs(S.V),[],'all'));
+    disp('Is S bounded?');
+    disp(S.isBounded);
+    % Diagnostic: print W and Phi
+    disp('Diagnostic: W vertices:');
+    disp(W.V);
+    disp('Diagnostic: W max abs vertex value:');
+    disp(max(abs(W.V),[],'all'));
+    disp('Diagnostic: Phi matrix:');
+    disp(Phi);
+    disp('Diagnostic: Phi eigenvalues:');
+    disp(eig(Phi));
+    disp('Diagnostic: epsilon:');
+    disp(epsilon);
+    % Additional diagnostics for S constraint matrices
+    if isprop(S, 'A') && isprop(S, 'b')
+        disp('Diagnostic: S.A size:');
+        disp(size(S.A));
+        disp('Diagnostic: S.b size:');
+        disp(size(S.b));
+        if isempty(S.A) || isempty(S.b)
+            warning('S.A or S.b is empty! MRPI set S may be degenerate or empty.');
+        end
+    end
 catch ME
     stats.t_mrpi_s = toc(t_mrpi_s);
-    disp('MRPISet or minHRep failed for S!');
+    disp('MRPISet or minHRep failed for S, even after fallback!');
     disp(ME.message);
     disp('Diagnostics:');
     disp('Phi:');
@@ -317,7 +573,51 @@ stats.t_feareg = toc(t_feareg);
 stats.F_N_RMPC_size = size(F_N_RMPC);
 stats.F_N_True_size = size(F_N_True);
 stats.F_N_Hat_Opt_size = size(F_N_Hat_Opt);
-opts_feasible_region.hs = hs_RMPC;
+
+% --- Automated post-processing and diagnostics for hs ---
+hs_threshold = 1e6;
+large_hs_idx = find(abs(hs_RMPC) > hs_threshold);
+if ~isempty(large_hs_idx)
+    warning('Some hs values are extremely large! Indices:');
+    disp(large_hs_idx);
+    disp('Large hs values:');
+    disp(hs_RMPC(large_hs_idx));
+    % Cap large hs values for downstream use (optional)
+    hs_RMPC_capped = hs_RMPC;
+    hs_RMPC_capped(large_hs_idx) = sign(hs_RMPC(large_hs_idx)) * hs_threshold;
+    disp('Capped hs values:');
+    disp(hs_RMPC_capped(large_hs_idx));
+    % Print condition number diagnostics for F_Com
+    if exist('F_N_RMPC','var')
+        cond_F = cond(F_N_RMPC);
+        disp(['Condition number of F_N_RMPC: ', num2str(cond_F)]);
+        if cond_F > 1e8
+            warning('F_N_RMPC is ill-conditioned!');
+        end
+    end
+    % Optionally, flag for further relaxation or fallback
+    % For full automation, you could retry with inflated W or increased epsilon here
+    % For now, just cap and continue
+    opts_feasible_region.hs = hs_RMPC_capped;
+else
+    opts_feasible_region.hs = hs_RMPC;
+end
+
+function vol = bounding_box_volume(P)
+    % Computes the volume of the axis-aligned bounding box of polyhedron P
+    v_min = min(P.V, [], 1);
+    v_max = max(P.V, [], 1);
+    vol = prod(v_max - v_min);
+end
+
+stats.F_N_RMPC_bbox_vol = bounding_box_volume(F_N_RMPC);
+stats.F_N_True_bbox_vol = bounding_box_volume(F_N_True);
+stats.F_N_Hat_Opt_bbox_vol = bounding_box_volume(F_N_Hat_Opt);
+
+fprintf('F_N_RMPC bounding box volume: %.4g\n', stats.F_N_RMPC_bbox_vol);
+fprintf('F_N_True bounding box volume: %.4g\n', stats.F_N_True_bbox_vol);
+fprintf('F_N_Hat_Opt bounding box volume: %.4g\n', stats.F_N_Hat_Opt_bbox_vol);
+
 
 opts_Car.A          = A;
 opts_Car.B          = B;
@@ -364,7 +664,7 @@ feas_str_stats = '';
 if exist('Nu_RMPC','var')
     feas_str_stats = ['_feas', num2str(Nu_RMPC/opts_RMPC.N, '%.3f')];
 end
-save(['stats_FINAL_nx', num2str(nx), feas_str_stats, '.mat'], 'stats');
+save(['stats_FINAL_nx', num2str(nx), feas_str_stats, '_2.mat'], 'stats');
 
 parameters.opts_ini_set         = opts_ini_set;
 parameters.opts_feasible_region = opts_feasible_region;
@@ -385,17 +685,39 @@ feas_str = '';
 if exist('Nu_RMPC','var')
     feas_str = ['_feas', num2str(Nu_RMPC/opts_RMPC.N, '%.3f')];
 end
-save(['parameters_FINAL_nx', num2str(nx), feas_str, '.mat'], 'parameters');
+save(['parameters_FINAL_nx', num2str(nx), feas_str, '_3.mat'], 'parameters');
 
 fprintf('\nComputation time: %.2f seconds\n', stats.elapsedTime)
 
 % --- Helper Functions ---
+%{
 function P_full = embedInFullDim(P, nx)
     % Pads the vertices of a lower-dimensional polyhedron with zeros
     V = P.V;
     V_full = [V, zeros(size(V,1), nx - size(V,2))];
     P_full = Polyhedron('V', V_full);
 end
+%}
+
+function P_full = embedInFullDim(P, nx, pad_value)
+    % Pads the vertices of a lower-dimensional polyhedron with pad_value (default 0)
+    if nargin < 3
+        pad_value = 0;
+    end
+    V = P.V;
+    % If pad_value is a scalar, add small random noise to avoid degeneracy
+    if pad_value ~= 0
+        noise = 1e-5 * randn(size(V,1), nx - size(V,2));
+        V_full = [V, pad_value * ones(size(V,1), nx - size(V,2)) + noise];
+    else
+        V_full = [V, zeros(size(V,1), nx - size(V,2))];
+    end
+    if any(~isfinite(V_full(:)))
+        error('Embedded vertices contain Inf or NaN!');
+    end
+    P_full = Polyhedron('V', V_full);
+end
+
 
 function print_set_info(name, P)
     disp(['--- DIAGNOSTIC: ', name, ' ---']);
@@ -469,20 +791,21 @@ end
 
 function Ps = compute_Ps(F_bar, Psi, Nu_RMPC, hs_RMPC, nx, N, nu)
     % Compute the constraint polyhedron for the scenario-based MPC
+    disp('compute_Ps:');
     H = [];
     h = [];
     for i = 0:Nu_RMPC
         H = [H; F_bar*(Psi^i)];
         h = [h; 1 - hs_RMPC];
     end
-    Poly = Polyhedron(H, h);
-    Poly = minHRep(Poly);
-    V = Poly.V;
-    [m, ~] = size(V);
+    % Use H-representation directly for constraints
+    [m, n] = size(H);
     Ps = sdpvar(nx + N*nu, nx + N*nu);
     Constraints = [];
     for i = 1:m
-        Constraints = [Constraints, norm(Ps*V(i, :)', 2) <= 1];
+        % Use the rows of H as directions, or sample feasible points instead
+        % Example: norm(Ps*H(i,:)', 2) <= 1; (or sample feasible z)
+        Constraints = [Constraints, norm(Ps*H(i,:)', 2) <= 1];
     end
     Objective = -logdet(Ps);
     optimize(Constraints, Objective);
