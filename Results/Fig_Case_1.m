@@ -2,8 +2,8 @@
 clc
 clear
 close all
-load('Results_1_NEW.mat');
-load('parameters_NEW.mat');
+load('Results_1_FINAL_nx2_feas2.375.mat');
+load('parameters_FINAL_nx2_feas2.375.mat');
 N_sam_ini = Results_1.N_sam_ini;
 Samples_ini = Results_1.Samples_ini;
 Alpha_ini = Results_1.Alpha_ini;
@@ -30,15 +30,15 @@ c5     = [88, 163, 153]/255;
 close all
 for i = 1:length(N_sam_ini)
     figure(i)
-    plot(W, 'wire', 1, 'edgecolor', c_w, 'linewidth', 2.5);
+    h1 = plot(W, 'wire', 1, 'edgecolor', c_w, 'linewidth', 2.5);
     hold on
-    plot(W_Hat_ini{i}, 'wire', 1, 'edgecolor', c_hat, 'linewidth', 2.5);
+    h4 = plot(W_Hat_ini{i}, 'wire', 1, 'edgecolor', c_hat, 'linewidth', 2.5);
     hold on
-    plot(W_true, 'wire', 1, 'edgecolor', c_true, 'linewidth', 2.5);
+    h2 = plot(W_true, 'wire', 1, 'edgecolor', c_true, 'linewidth', 2.5);
     hold on
-    plot(W_hat_opt, 'wire', 1, 'edgecolor', c_opt, 'linewidth', 2.5);
+    h3 = plot(W_hat_opt, 'wire', 1, 'edgecolor', c_opt, 'linewidth', 2.5);
     hold on
-    plot(Samples_ini{i}(1, :),Samples_ini{i}(2, :), 'color', c5, 'marker', '.','markersize', 10, 'LineStyle','none');
+    h5 = plot(Samples_ini{i}(1, :),Samples_ini{i}(2, :), 'color', c5, 'marker', '.','markersize', 10, 'LineStyle','none');
     box on
     grid off
     xlim([-0.62, 0.62]);
@@ -50,13 +50,15 @@ for i = 1:length(N_sam_ini)
     set(gca,'LooseInset',get(gca,'TightInset'));
     set(gcf,'unit','centimeters','position',[5 5 10 10]);
     set(gcf, 'PaperSize', [16 7]);
+    legend([h1 h2 h3 h4], {'$W$', '$W_{\rm true}$', '$\widehat{W}_{\rm opt}$', '$\widehat{W}_0^*$'}, 'Interpreter', 'latex', 'Location', 'eastoutside', 'FontSize', 14);
     savename = sprintf('NEW_Fig_W_hat_vs_W_Samples_%d.pdf', N_sam_ini(i));
     exportgraphics(gcf, savename,'ContentType','vector');
 end
 %%
-close all
+hold off
+%close all
 for i = 1:length(N_sam_ini)
-    figure(i)
+    figure(i + length(N_sam_ini))
     S_hat_ini = Alpha_ini(i)*S + (1 - Alpha_ini(i))*(inv(1 - Phi)*V_ini(:, i));
     hs_UQMPC = FeasibleRegion.ComFeasibleRegion_UQMPC_Hs_ini(S_hat_ini);
     [~, F_N_Hat] = FeasibleRegion.ComFeasibleRegion_UQMPC(S_hat_ini, hs_UQMPC);
