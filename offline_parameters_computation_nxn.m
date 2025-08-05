@@ -5,7 +5,7 @@ close all
 
 main_tic = tic;
 stats = struct();
-stats.nx = 2; %%% NUMBER OF STATES
+stats.nx = 4; %%% NUMBER OF STATES
 stats.nu = 1; %%% NUMBER OF INPUTS
 stats.N = 8;
 stats.start_time = datetime('now');
@@ -38,8 +38,8 @@ if nx == 2
     Rotation_EV = [cos(theta_EV) -sin(theta_EV); sin(theta_EV) cos(theta_EV)]; 
     Rotation_LV = [cos(theta_LV) -sin(theta_LV); sin(theta_LV) cos(theta_LV)]; 
     
-    Xi_true_EV  = Rotation_EV*Polyhedron([-0.06 -0.015;0.06 -0.015; 0.01 0.025; -0.01 0.025]); 
-    Xi_true_LV  = Rotation_LV*Polyhedron([-0.06 0.015;0.06 0.015; 0.01 -0.025; -0.01 -0.025]);
+    Xi_true_EV  = Rotation_EV*Polyhedron([-0.06 -0.015; 0.06 -0.015; 0.01 0.025; -0.01 0.025]); 
+    Xi_true_LV  = Rotation_LV*Polyhedron([-0.06 0.015; 0.06 0.015; 0.01 -0.025; -0.01 -0.025]);
 
 elseif nx == 3
     theta_EV = pi/12;
@@ -73,17 +73,25 @@ elseif nx == 3
     Xi_true_LV = Polyhedron('V', V_LV_rot);
 
 elseif nx == 4
-    % Directly define proper 4D polyhedra for EV and LV uncertainty sets
-    % Example: 4D hypercube centered at origin, side length 0.02
-    cube_side = 0.02;
-    V_EV_4D = cube_side * (dec2bin(0:15) - '0') - cube_side/2; % 16 vertices for 4D cube
-    V_LV_4D = cube_side * (dec2bin(0:15) - '0') - cube_side/2; % You can adjust LV shape if needed
+    % Define a 4D cuboid for EV and LV uncertainty sets (box, axis-aligned)
+    cuboid_half_lengths_EV = [0.015, 0.01, 0.008, 0.012]; % example values
+    cuboid_half_lengths_LV = [0.018, 0.009, 0.007, 0.011]; % example values
 
-    % Optionally, rotate or scale the cubes for more realism
-    % Example: random rotation for EV and LV
+    % Generate all 16 vertices for the 4D cuboid
+    V_EV_4D = [];
+    V_LV_4D = [];
+    for i = 0:15
+        bits = bitget(i, 4:-1:1)*2 - 1; % [-1,1] for each dimension
+        V_EV_4D = [V_EV_4D; bits .* cuboid_half_lengths_EV];
+        V_LV_4D = [V_LV_4D; bits .* cuboid_half_lengths_LV];
+    end
+
+    % Add a small random rotation for realism
     rng(42); % for reproducibility
-    Q_EV = orth(randn(4,4));
-    Q_LV = orth(randn(4,4));
+    angle = pi/18; % small rotation angle
+    % Generate a random orthogonal matrix close to identity
+    [Q_EV,~] = qr(eye(4) + angle*randn(4));
+    [Q_LV,~] = qr(eye(4) + angle*randn(4));
     V_EV_4D_rot = (Q_EV * V_EV_4D')';
     V_LV_4D_rot = (Q_LV * V_LV_4D')';
 
@@ -125,7 +133,7 @@ disp(['Dimension of Xi_true_LV: ', num2str(Xi_true_LV.Dim)]);
 
 min_u_LV    = -1/20;
 max_u_LV    = 1/16;
-U_true_LV   = Polyhedron([1/max_u_LV; 1/min_u_LV], [1; 1]);
+U_true_LV   = Polyhedron([1/max_u_LV; -1/min_u_LV], [1; -1]);
 
 % --- Robust box embedding function ---
 function P_full = embedInFullDimBox(P, nx, pad_value)
@@ -159,11 +167,6 @@ W_true      = Xi_true_EV + (-1*Xi_true_LV) + (-B*U_true_LV);
 disp(['Dimension W_true: ', num2str(W_true.Dim)]);
 disp('First 10 rows of W_true.V:');
 disp(W_true.V(1:min(10, size(W_true.V,1)), :));
-%print_set_info('Xi_true_EV', Xi_true_EV);
-%print_set_info('Xi_true_LV', Xi_true_LV);
-%print_set_info('W_true', W_true);
-
-% --- PATCH: Robustify W_true and S_true construction for full-dimensionality and boundedness ---
 
 % After constructing W_true, ensure it is full-dimensional
 if rank(W_true.V - W_true.V(1,:)) < nx
@@ -176,10 +179,6 @@ end
 if nx == 2
     W = Polyhedron([-0.5 -0.2; 0.5 -0.2; 0.5 0.2; -0.5 0.2]);
 elseif nx == 3
-    % --- Original/previous implementation (commented out) ---
-    % W = embedInFullDim(Polyhedron([-0.01 -0.01 0; 0.01 -0.01 0; 0.01 0.01 0; -0.01 0.01 0]), nx);
-    % W = embedInFullDim(Polyhedron([-0.4 -0.2 -0.1; 0.01 -0.01 0; 0.01 0.01 0; -0.01 0.01 0]), nx);
-
     % --- New 3D cuboid definition ---
     % Define a 3D cuboid with 8 vertices
     V_cuboid = [
@@ -194,7 +193,17 @@ elseif nx == 3
     ]*1.5; % Scale factor for robustness, adjust as needed
     W_3D = Polyhedron('V', V_cuboid);    
     W = W_3D;
+elseif nx == 4
+    % 4D cuboid with 16 vertices
+    cuboid_half_lengths = [0.12, 0.08, 0.06, 0.09]; % example values, adjust as needed
+    V_cuboid_4D = [];
+    for i = 0:15
+        bits = bitget(i, 4:-1:1)*2 - 1; % [-1,1] for each dimension
+        V_cuboid_4D = [V_cuboid_4D; bits .* cuboid_half_lengths];
+    end
+    W = Polyhedron('V', V_cuboid_4D);
 else
+    % For nx >= 5, use robust box embedding
     V_cuboid = [
         -0.12, -0.08, -0.06;
          0.12, -0.08, -0.06;
@@ -204,11 +213,9 @@ else
          0.12, -0.08,  0.06;
          0.12,  0.08,  0.06;
         -0.12,  0.08,  0.06
-    ]*0.05; % 0.65 works for 4D
+    ] * 0.05;
     W_3D = Polyhedron('V', V_cuboid);
     W = embedInFullDimBox(W_3D, nx, 0.01);
-    %%%%% fallback
-    %W = embedInFullDim(Polyhedron([-0.01 -0.01 0; 0.01 -0.01 0; 0.01 0.01 0; -0.01 0.01 0]), nx);
 end
 
 W_true      = minHRep(W_true);         
@@ -250,31 +257,30 @@ elseif nx == 3
     disp('G matrix:');
     disp(G);
 elseif nx == 4
-    % Proposed method: random directions + mixed constraints for robustness
-    nc_state = 2*nx;
+    % Use simple axis-aligned constraints like in 3D case
+    nc_state = 2*nx;  % Just like 3D case: two constraints per dimension
     nc_input = 2;
-    distance_error = 60;
+    nc = nc_state + nc_input;
+    
+    % Define constraints
+    distance_error = 60;  % Keep same scale as before
     acc_bound = 60;
     state_bounds = distance_error * ones(nx,1);
-    % Random directions for state constraints
-    rng(123);
-    F_rand = zeros(nc_state, nx);
-    for i = 1:nx
-        dir = randn(1, nx);
-        dir = dir / norm(dir);
-        F_rand(2*i-1, :) =  dir / state_bounds(i);
-        F_rand(2*i,   :) = -dir / state_bounds(i);
-    end
-    % Mixed constraints
-    F_extra = [1 1 0 0; -1 -1 0 0; 0 1 1 0; 0 -1 -1 0; 0 0 1 1; 0 0 -1 -1];
-    F_extra = F_extra / distance_error;
-    F = [F_rand; F_extra];
-    nc = size(F,1); % <-- Fix: nc is now the number of rows in F
+    
+    % State constraints (axis-aligned only)
+    F = zeros(nc, nx);
     G = zeros(nc, nu);
-    % Input constraints: add to last two rows
-    G(end-1,1) = 1/acc_bound;
-    G(end,1)   = -1/acc_bound;
-    disp('F matrix (random + mixed):');
+    
+    for i = 1:nx
+        F(2*i-1, i) = 1/state_bounds(i);
+        F(2*i,   i) = -1/state_bounds(i);
+    end
+    
+    % Input constraints
+    G(2*nx+1,1) = 1/acc_bound;
+    G(2*nx+2,1) = -1/acc_bound;
+    
+    disp('F matrix:');
     disp(F);
     disp('G matrix:');
     disp(G);
@@ -354,7 +360,6 @@ stats.alpha_opt = alpha_opt;
 stats.v_opt = v_opt;
 W_hat_opt = (1 - alpha_opt)*v_opt + alpha_opt*W;
 
-
 try
     W_hat_opt = Polyhedron('A', W_hat_opt.A, 'b', W_hat_opt.b);
     disp('W_hat_opt Polyhedron created. Vertices:');
@@ -377,20 +382,7 @@ catch ME
     error('Aborting due to W_hat_opt Polyhedron creation failure.');
 end
 
-% --- Fallback: If MRPISet fails, retry with a full box polytope ---
-function S_hat_opt = robust_MRPISet(Phi, W_hat_opt, epsilon, nx)
-    try
-        S_hat_opt = MRPISet(Phi, W_hat_opt, max(epsilon,1.0));
-        S_hat_opt = minHRep(S_hat_opt);
-    catch
-        disp('MRPISet failed for W_hat_opt. Retrying with larger box polytope...');
-        W_box = construct_box_polytope(nx, 0.2, 1e-4); % scaling=0.2, small noise
-        S_hat_opt = MRPISet(Phi, W_box, max(epsilon,1.0)); % use larger epsilon for fallback
-        S_hat_opt = minHRep(S_hat_opt);
-    end
-end
-
-epsilon = 1.0;
+epsilon = 0.1;
 
 eig_Phi = eig(Phi);
 disp('Closed-loop eigenvalues:');
@@ -403,7 +395,8 @@ end
 t_mrpi_shat = tic;
 try
     disp('Calling MRPISet for S_hat_opt...');
-    S_hat_opt = robust_MRPISet(Phi, W_hat_opt, epsilon, nx);
+    S_hat_opt = MRPISet(Phi, W_hat_opt, epsilon);
+    S_hat_opt = minHRep(S_hat_opt);
     stats.t_mrpi_shat = toc(t_mrpi_shat);
     stats.S_hat_opt_num_vertices = size(S_hat_opt.V,1);
     stats.S_hat_opt_num_constraints = size(S_hat_opt.A,1);
@@ -416,7 +409,7 @@ try
     disp(S_hat_opt.isBounded);
 catch ME
     stats.t_mrpi_shat = toc(t_mrpi_shat);
-    disp('MRPISet or minHRep failed for S_hat_opt, even after fallback!');
+    disp('MRPISet or minHRep failed for S_hat_opt!');
     disp(ME.message);
     disp('Diagnostics:');
     disp('Phi:');
@@ -427,11 +420,60 @@ catch ME
 end
 
 % --- Timing: MRPI S_true ---
+max_vertices = 40;
+if size(W_true.V,1) > max_vertices
+    warning('Reducing W_true vertices for MRPISet...');
+    idx = randperm(size(W_true.V,1), max_vertices);
+    W_true = Polyhedron('V', W_true.V(idx,:));
+end
+
 t_mrpi_strue = tic;
 try
     disp('Calling MRPISet for S_true...');
     S_true = MRPISet(Phi, W_true, epsilon);
-    S_true = minHRep(S_true);
+    try
+        % --- FIX for CDD Error: Rescale before minHRep ---
+        if S_true.hasVRep && ~isempty(S_true.V)
+            % 1. Find the scaling factor and center
+            V = S_true.V;
+            center = mean(V, 1);
+            max_abs_coord = max(abs(V - center), [], 'all');
+            
+            if max_abs_coord > 1e-6 % Avoid division by zero
+                scale_factor = 1 / max_abs_coord;
+
+                % 2. Scale and center the polyhedron
+                S_true_scaled = Polyhedron('V', (V - center) * scale_factor);
+
+                % 3. Compute minimal representation on the scaled version
+                S_true_scaled.minHRep();
+
+                % 4. Scale back to the original size and position
+                A_scaled = S_true_scaled.A;
+                b_scaled = S_true_scaled.b;
+                S_true = Polyhedron('A', A_scaled, 'b', b_scaled + A_scaled * center');
+            else
+                 S_true.minHRep(); % No scaling needed if already centered at zero
+            end
+        else
+            S_true = minHRep(S_true); % Use original call if no V-rep
+        end
+    catch ME_minHRep
+        if contains(ME_minHRep.message, 'CDD')
+            warning('minHRep failed for S_true with a CDD error. Approximating S_true with its bounding box.');
+            if S_true.hasVRep
+                V = S_true.V;
+                min_v = min(V, [], 1);
+                max_v = max(V, [], 1);
+                S_true = Polyhedron('lb', min_v, 'ub', max_v);
+            else
+                warning('Cannot create bounding box for S_true as V-representation is missing. Re-throwing error.');
+                rethrow(ME_minHRep);
+            end
+        else
+            rethrow(ME_minHRep);
+        end
+    end
     stats.t_mrpi_strue = toc(t_mrpi_strue);
     stats.S_true_num_vertices = size(S_true.V,1);
     stats.S_true_num_constraints = size(S_true.A,1);
@@ -442,10 +484,10 @@ try
     disp('Max abs vertex value:');
     disp(max(abs(S_true.V),[],'all'));
     % --- Diagnostics for S_true boundedness and rank ---
-    disp('S_true constraint matrix (A):');
-    disp(S_true.A);
-    disp('S_true constraint vector (b):');
-    disp(S_true.b);
+    %disp('S_true constraint matrix (A):');
+    %disp(S_true.A);
+    %disp('S_true constraint vector (b):');
+    %disp(S_true.b);
     disp(['Rank of S_true.A: ', num2str(rank(S_true.A))]);
     if rank(S_true.A) < nx
         warning('S_true.A does not constrain all directions! S_true will be unbounded.');
@@ -503,7 +545,50 @@ end
 t_mrpi_s = tic;
 try
     disp('Calling MRPISet for S...');
-    S = robust_MRPISet(Phi, W, epsilon, nx);
+    S = MRPISet(Phi, W, epsilon);
+    try
+        % --- FIX for CDD Error: Rescale before minHRep ---
+        if S.hasVRep && ~isempty(S.V)
+            % 1. Find the scaling factor and center
+            V = S.V;
+            center = mean(V, 1);
+            max_abs_coord = max(abs(V - center), [], 'all');
+
+            if max_abs_coord > 1e-6 % Avoid division by zero
+                scale_factor = 1 / max_abs_coord;
+
+                % 2. Scale and center the polyhedron
+                S_scaled = Polyhedron('V', (V - center) * scale_factor);
+
+                % 3. Compute minimal representation on the scaled version
+                S_scaled.minHRep();
+
+                % 4. Scale back to the original size and position
+                A_scaled = S_scaled.A;
+                b_scaled = S_scaled.b;
+                S = Polyhedron('A', A_scaled, 'b', b_scaled + A_scaled * center');
+            else
+                S.minHRep(); % No scaling needed if already centered at zero
+            end
+        else
+            S = minHRep(S); % Use original call if no V-rep
+        end
+    catch ME_minHRep
+        if contains(ME_minHRep.message, 'CDD')
+            warning('minHRep failed for S with a CDD error. Approximating S with its bounding box.');
+            if S.hasVRep
+                V = S.V;
+                min_v = min(V, [], 1);
+                max_v = max(V, [], 1);
+                S = Polyhedron('lb', min_v, 'ub', max_v);
+            else
+                warning('Cannot create bounding box for S as V-representation is missing. Re-throwing error.');
+                rethrow(ME_minHRep);
+            end
+        else
+            rethrow(ME_minHRep);
+        end
+    end
     stats.t_mrpi_s = toc(t_mrpi_s);
     stats.S_num_vertices = size(S.V,1);
     stats.S_num_constraints = size(S.A,1);
@@ -737,56 +822,6 @@ function W = construct_box_polytope(nx, scaling, noise)
     end
     V = V + noise*randn(size(V));
     W = Polyhedron('V', V);
-end
-
-function [W, success] = try_construct_W(nx, scaling_factors, noise)
-    success = false;
-    for attempt = 1:length(scaling_factors)
-        try
-            if nx == 2
-                W = Polyhedron([-0.5 -0.2; 0.5 -0.2; 0.5 0.2; -0.5 0.2] * scaling_factors(attempt));
-            else
-                W = construct_box_polytope(nx, scaling_factors(attempt), noise);
-            end
-            W = minHRep(W);
-            if rank(W.V - W.V(1,:)) < nx
-                warning('W is degenerate or nearly so!');
-                continue;
-            end
-            success = true;
-            break;
-        catch
-            continue;
-        end
-    end
-    if ~success
-        error('Failed to create a valid, non-degenerate W after multiple attempts.');
-    end
-end
-
-function [S, success, W_out] = try_construct_S(Phi, W, scaling_factors, epsilon, nx)
-    success = false;
-    W_out = W;
-    for attempt_s = 1:length(scaling_factors)
-        try
-            W_scaled = W_out * scaling_factors(attempt_s);
-            S_tmp = MRPISet(Phi, W_scaled, epsilon);
-            S_tmp = minHRep(S_tmp);
-            if rank(S_tmp.V - S_tmp.V(1,:)) < nx
-                warning('S is degenerate or nearly so!');
-                continue;
-            end
-            S = S_tmp;
-            W_out = W_scaled;
-            success = true;
-            break;
-        catch
-            continue;
-        end
-    end
-    if ~success
-        error('Failed to create a valid S after multiple scaling attempts.');
-    end
 end
 
 function Ps = compute_Ps(F_bar, Psi, Nu_RMPC, hs_RMPC, nx, N, nu)
