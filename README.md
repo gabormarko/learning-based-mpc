@@ -30,6 +30,8 @@ To run the code you need to install:
 **MPT**: https://www.mpt3.org/Main/Installation; (The installation will automatically install Yalmip, which is also necessary for running the code.)
 
 ## Introduction to the files
+The repository includes both the original scripts corresponding to the 2D hardcoded functions, and the modularized general sripts.
+To switch between these 2 codebases, start by setting the file paths for the desired folders in **run_first.m**.
 
 ## offline_parameters_computation_nxn.m
 Generalized version of the `offline_parameters_computation.m` file.

@@ -5,3 +5,9 @@
 # Ignore all MATLAB .mat files
 parameters_NEW.mat
 Results_1_NEW.mat
+
+# Untracked files to ignore
+Results_1_FINAL_nx3_feas5.750_2
+compare_S_and_S_true.m
+learning-based-rigid-tube-rmpc-master/
+plot_stats_old.m

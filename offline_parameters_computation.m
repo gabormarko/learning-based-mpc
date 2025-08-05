@@ -27,7 +27,7 @@ max_u_LV    = 1/16;
 U_true_LV   = Polyhedron([1/max_u_LV; 1/min_u_LV], [1; 1]);
 W_true      = Xi_true_EV + (-1*Xi_true_LV) + (-B*U_true_LV);  
 % Above: Construct the true uncertainty set of EV and LV
-W           = Polyhedron([-0.5 -0.2; 0.5 -0.2; 0.5 0.2; -0.5 0.2]);  
+W           = Polyhedron([-0.4 -0.3; 0.4 -0.3; 0.4 0.3; -0.4 0.3]);  
 Xi_true_EV  = minHRep(Xi_true_EV); 
 Xi_true_LV  = minHRep(Xi_true_LV); 
 W_true      = minHRep(W_true);         
